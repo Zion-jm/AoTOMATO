@@ -1,0 +1,31 @@
+kind = "data-app"
+previewPath = "/"
+title = "Greenhouse Analytics"
+version = "1.0.0"
+id = "artifacts/greenhouse-analytics"
+router = "path"
+
+[[integratedSkills]]
+name = "data-visualization"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25631
+
+[services.development]
+run = "pnpm --filter @workspace/greenhouse-analytics run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/greenhouse-analytics", "run", "build" ]
+publicDir = "artifacts/greenhouse-analytics/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25631"
+BASE_PATH = "/"
