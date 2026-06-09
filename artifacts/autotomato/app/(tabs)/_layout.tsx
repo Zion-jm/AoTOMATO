@@ -27,6 +27,10 @@ function NativeTabLayout() {
         <Icon sf={{ default: "bell", selected: "bell.fill" }} />
         <Label>Alerts</Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="analytics">
+        <Icon sf={{ default: "chart.bar", selected: "chart.bar.fill" }} />
+        <Label>Analytics</Label>
+      </NativeTabs.Trigger>
     </NativeTabs>
   );
 }
@@ -109,6 +113,18 @@ function ClassicTabLayout() {
               <SymbolView name="bell.fill" tintColor={color} size={22} />
             ) : (
               <MaterialCommunityIcons name="bell-outline" size={22} color={color} />
+            ),
+        }}
+      />
+      <Tabs.Screen
+        name="analytics"
+        options={{
+          title: "Analytics",
+          tabBarIcon: ({ color }) =>
+            isIOS ? (
+              <SymbolView name="chart.bar.fill" tintColor={color} size={22} />
+            ) : (
+              <MaterialCommunityIcons name="chart-bar" size={22} color={color} />
             ),
         }}
       />
