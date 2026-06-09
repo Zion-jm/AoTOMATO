@@ -1,6 +1,5 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
   description: API specification
@@ -10,13 +9,14 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: analytics
+    description: Greenhouse analytics
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +24,104 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /analytics/sensors/current:
+    get:
+      operationId: getSensorsCurrent
+      tags: [analytics]
+      summary: Current readings for all sensors
+      responses:
+        "200":
+          description: Current sensor readings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SensorReading"
+
+  /analytics/sensors/summary:
+    get:
+      operationId: getSensorsSummary
+      tags: [analytics]
+      summary: Stats summary for all sensors (min, max, avg, % time optimal)
+      responses:
+        "200":
+          description: Sensor stats summary
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SensorSummary"
+
+  /analytics/sensors/{sensorId}/history/{range}:
+    get:
+      operationId: getSensorHistory
+      tags: [analytics]
+      summary: Time-series readings for a sensor
+      parameters:
+        - in: path
+          name: sensorId
+          required: true
+          schema:
+            type: string
+        - in: path
+          name: range
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Time-series data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SensorHistory"
+
+  /analytics/devices:
+    get:
+      operationId: getDevicesAnalytics
+      tags: [analytics]
+      summary: Device states and daily runtime stats
+      responses:
+        "200":
+          description: Device analytics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DeviceAnalytics"
+
+  /analytics/alerts/recent:
+    get:
+      operationId: getAlertsRecent
+      tags: [analytics]
+      summary: Recent alerts list
+      responses:
+        "200":
+          description: Recent alerts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AlertItem"
+
+  /analytics/alerts/summary:
+    get:
+      operationId: getAlertsSummary
+      tags: [analytics]
+      summary: Alert counts by sensor and severity
+      responses:
+        "200":
+          description: Alerts summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertsSummary"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +132,147 @@ components:
       required:
         - status
 
+    SensorReading:
+      type: object
+      required: [id, label, value, unit, status, descriptor]
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        value:
+          type: number
+        unit:
+          type: string
+        status:
+          type: string
+          enum: [optimal, warning, critical]
+        descriptor:
+          type: string
+
+    SensorSummary:
+      type: object
+      required: [id, label, unit, min, max, avg, pctOptimal, pctWarning, pctCritical, currentStatus]
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        unit:
+          type: string
+        min:
+          type: number
+        max:
+          type: number
+        avg:
+          type: number
+        pctOptimal:
+          type: number
+        pctWarning:
+          type: number
+        pctCritical:
+          type: number
+        currentStatus:
+          type: string
+          enum: [optimal, warning, critical]
+
+    SensorDataPoint:
+      type: object
+      required: [timestamp, value, status]
+      properties:
+        timestamp:
+          type: string
+        value:
+          type: number
+        status:
+          type: string
+          enum: [optimal, warning, critical]
+
+    SensorHistory:
+      type: object
+      required: [sensorId, label, unit, range, data]
+      properties:
+        sensorId:
+          type: string
+        label:
+          type: string
+        unit:
+          type: string
+        range:
+          type: string
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/SensorDataPoint"
+
+    DeviceAnalytics:
+      type: object
+      required: [id, name, isRunning, mode, todayRuntimeHours, weekRuntimeHours, activationCount]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        isRunning:
+          type: boolean
+        mode:
+          type: string
+          enum: [AUTO, FORCE_ON, FORCE_OFF]
+        todayRuntimeHours:
+          type: number
+        weekRuntimeHours:
+          type: number
+        activationCount:
+          type: integer
+
+    AlertItem:
+      type: object
+      required: [id, message, severity, timestamp]
+      properties:
+        id:
+          type: string
+        message:
+          type: string
+        severity:
+          type: string
+          enum: [info, warning, critical]
+        timestamp:
+          type: string
+        sensor:
+          type: ["string", "null"]
+
+    AlertsBySensor:
+      type: object
+      required: [sensor, label, info, warning, critical, total]
+      properties:
+        sensor:
+          type: string
+        label:
+          type: string
+        info:
+          type: integer
+        warning:
+          type: integer
+        critical:
+          type: integer
+        total:
+          type: integer
+
+    AlertsSummary:
+      type: object
+      required: [totalToday, totalWeek, criticalCount, warningCount, infoCount, bySensor]
+      properties:
+        totalToday:
+          type: integer
+        totalWeek:
+          type: integer
+        criticalCount:
+          type: integer
+        warningCount:
+          type: integer
+        infoCount:
+          type: integer
+        bySensor:
+          type: array
+          items:
+            $ref: "#/components/schemas/AlertsBySensor"
