@@ -1,7 +1,9 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
-import { SensorReading } from "@/contexts/GreenhouseContext";
+import { SensorReading, useGreenhouse } from "@/contexts/GreenhouseContext";
 import { useColors } from "@/hooks/useColors";
+import { Sparkline } from "@/components/Sparkline";
 
 interface SensorCardProps {
   sensor: SensorReading;
@@ -27,8 +29,28 @@ function SensorIcon({ id }: { id: string }) {
   );
 }
 
+function TrendArrow({ history, color }: { history: number[]; color: string }) {
+  if (history.length < 3) return null;
+  const recent = history.slice(-3);
+  const delta = recent[recent.length - 1] - recent[0];
+  const threshold = (Math.max(...history) - Math.min(...history)) * 0.05;
+
+  if (Math.abs(delta) < threshold) {
+    return <MaterialCommunityIcons name="minus" size={12} color={color} />;
+  }
+  return (
+    <MaterialCommunityIcons
+      name={delta > 0 ? "trending-up" : "trending-down"}
+      size={12}
+      color={color}
+    />
+  );
+}
+
 export function SensorCard({ sensor, grayed = false }: SensorCardProps) {
   const colors = useColors();
+  const { sensorHistory } = useGreenhouse();
+  const history = sensorHistory[sensor.id] ?? [];
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   const statusColor =
@@ -37,6 +59,8 @@ export function SensorCard({ sensor, grayed = false }: SensorCardProps) {
       : sensor.status === "warning"
       ? colors.warning
       : colors.critical;
+
+  const sparkColor = grayed ? colors.border : statusColor;
 
   useEffect(() => {
     if (sensor.status === "critical") {
@@ -82,7 +106,7 @@ export function SensorCard({ sensor, grayed = false }: SensorCardProps) {
           <SensorIcon id={sensor.id} />
           <View style={styles.labelRow}>
             <Text
-              style={[styles.label, { color: grayed ? colors.mutedForeground : colors.mutedForeground }]}
+              style={[styles.label, { color: colors.mutedForeground }]}
               numberOfLines={1}
             >
               {sensor.label.toUpperCase()}
@@ -108,10 +132,15 @@ export function SensorCard({ sensor, grayed = false }: SensorCardProps) {
             {formatValue()}
           </Text>
           {sensor.unit ? (
-            <Text style={[styles.unit, { color: grayed ? colors.mutedForeground : colors.mutedForeground }]}>
+            <Text style={[styles.unit, { color: colors.mutedForeground }]}>
               {sensor.unit}
             </Text>
           ) : null}
+          {!grayed && (
+            <View style={styles.trendBadge}>
+              <TrendArrow history={history} color={statusColor} />
+            </View>
+          )}
         </View>
 
         <Text
@@ -120,6 +149,12 @@ export function SensorCard({ sensor, grayed = false }: SensorCardProps) {
         >
           {grayed ? "— Cached data" : sensor.descriptor.split("— ")[1] ?? sensor.descriptor}
         </Text>
+
+        {!grayed && history.length >= 2 && (
+          <View style={styles.sparklineWrap}>
+            <Sparkline data={history} color={sparkColor} width={120} height={36} />
+          </View>
+        )}
 
         <Text style={[styles.timestamp, { color: colors.mutedForeground }]}>
           Updated {formatTime(sensor.timestamp)}
@@ -195,10 +230,20 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_500Medium",
     paddingBottom: 4,
   },
+  trendBadge: {
+    paddingBottom: 6,
+    marginLeft: 2,
+  },
   descriptor: {
     fontSize: 12,
     fontFamily: "Inter_400Regular",
     lineHeight: 16,
+  },
+  sparklineWrap: {
+    marginTop: 4,
+    marginBottom: 2,
+    borderRadius: 6,
+    overflow: "hidden",
   },
   timestamp: {
     fontSize: 10,

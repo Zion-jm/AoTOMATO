@@ -45,6 +45,7 @@ export interface AutomationRule {
 
 interface GreenhouseContextType {
   sensors: SensorReading[];
+  sensorHistory: Record<string, number[]>;
   devices: DeviceState[];
   isOnline: boolean;
   isUsingCached: boolean;
@@ -297,8 +298,29 @@ function deriveDeviceRunning(device: DeviceState, sensors: SensorReading[]): boo
   return false;
 }
 
+const HISTORY_MAX = 30;
+
+function buildInitialHistory(): Record<string, number[]> {
+  const history: Record<string, number[]> = {
+    temperature: [],
+    humidity: [],
+    light: [],
+    soilMoisture: [],
+    ph: [],
+    ec: [],
+  };
+  for (let i = 0; i < 15; i++) {
+    const s = buildSensors();
+    for (const r of s) {
+      history[r.id].push(r.value);
+    }
+  }
+  return history;
+}
+
 export function GreenhouseProvider({ children }: { children: React.ReactNode }) {
   const [sensors, setSensors] = useState<SensorReading[]>(buildSensors);
+  const [sensorHistory, setSensorHistory] = useState<Record<string, number[]>>(buildInitialHistory);
   const [devices, setDevices] = useState<DeviceState[]>(DEFAULT_DEVICES);
   const [isOnline, setIsOnline] = useState(true);
   const [isUsingCached, setIsUsingCached] = useState(false);
@@ -328,6 +350,15 @@ export function GreenhouseProvider({ children }: { children: React.ReactNode }) 
       const newSensors = buildSensors();
       setSensors(newSensors);
       prevSensorRef.current = newSensors;
+
+      setSensorHistory((prev) => {
+        const next: Record<string, number[]> = {};
+        for (const s of newSensors) {
+          const existing = prev[s.id] ?? [];
+          next[s.id] = [...existing, s.value].slice(-HISTORY_MAX);
+        }
+        return next;
+      });
 
       setDevices((prev) =>
         prev.map((d) => ({ ...d, isRunning: deriveDeviceRunning(d, newSensors) }))
@@ -408,6 +439,7 @@ export function GreenhouseProvider({ children }: { children: React.ReactNode }) 
     <GreenhouseContext.Provider
       value={{
         sensors,
+        sensorHistory,
         devices,
         isOnline,
         isUsingCached,
