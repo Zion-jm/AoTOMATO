@@ -9,7 +9,7 @@ out-tsc
 .expo-shared
 
 # dependencies
-node_modules
+# node_modules
 
 # IDEs and editors
 /.idea
@@ -45,5 +45,5 @@ Thumbs.db
 .github/instructions/nx.instructions.md
 
 # Replit
-.cache/
-.local/
+# .cache/
+# .local/
