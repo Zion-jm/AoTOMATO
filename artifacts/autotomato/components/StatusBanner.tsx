@@ -104,11 +104,6 @@ export function StatusBanner({ sensors, isOffline = false }: StatusBannerProps) 
     }
   }, [info.type, shimmerAnim]);
 
-  const borderOpacity = shimmerAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.6, 1],
-  });
-
   return (
     <Animated.View
       style={[
@@ -116,7 +111,10 @@ export function StatusBanner({ sensors, isOffline = false }: StatusBannerProps) 
         {
           backgroundColor: bgColor,
           borderColor,
-          borderOpacity,
+          opacity: shimmerAnim.interpolate({
+            inputRange: [0, 1],
+            outputRange: [info.type === "critical" ? 0.85 : 1, 1],
+          }),
         },
       ]}
     >
