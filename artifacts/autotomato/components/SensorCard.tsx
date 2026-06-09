@@ -1,6 +1,7 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useEffect, useRef } from "react";
-import { Animated, StyleSheet, Text, View } from "react-native";
+import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
 import { SensorReading, useGreenhouse } from "@/contexts/GreenhouseContext";
 import { useColors } from "@/hooks/useColors";
 import { Sparkline } from "@/components/Sparkline";
@@ -34,7 +35,6 @@ function TrendArrow({ history, color }: { history: number[]; color: string }) {
   const recent = history.slice(-3);
   const delta = recent[recent.length - 1] - recent[0];
   const threshold = (Math.max(...history) - Math.min(...history)) * 0.05;
-
   if (Math.abs(delta) < threshold) {
     return <MaterialCommunityIcons name="minus" size={12} color={color} />;
   }
@@ -49,9 +49,11 @@ function TrendArrow({ history, color }: { history: number[]; color: string }) {
 
 export function SensorCard({ sensor, grayed = false }: SensorCardProps) {
   const colors = useColors();
+  const router = useRouter();
   const { sensorHistory } = useGreenhouse();
   const history = sensorHistory[sensor.id] ?? [];
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const statusColor =
     sensor.status === "optimal"
@@ -85,82 +87,87 @@ export function SensorCard({ sensor, grayed = false }: SensorCardProps) {
     return Math.round(sensor.value).toString();
   };
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  };
+  const formatTime = (date: Date) =>
+    date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+  const handlePress = () => router.push(`/sensor/${sensor.id}` as any);
+
+  const handlePressIn = () =>
+    Animated.spring(scaleAnim, { toValue: 0.96, useNativeDriver: true, speed: 30 }).start();
+
+  const handlePressOut = () =>
+    Animated.spring(scaleAnim, { toValue: 1, useNativeDriver: true, speed: 20 }).start();
+
+  const cardStyle = [
+    styles.card,
+    {
+      backgroundColor: colors.card,
+      borderColor: grayed ? colors.border : statusColor,
+      opacity: grayed ? 0.6 : 1,
+      transform: [{ scale: scaleAnim }],
+    },
+  ];
+
+  const dotStyle = [
+    styles.statusDot,
+    {
+      backgroundColor: grayed ? colors.border : statusColor,
+      opacity: pulseAnim,
+    },
+  ];
 
   return (
-    <Animated.View
-      style={[
-        styles.card,
-        {
-          backgroundColor: colors.card,
-          borderColor: grayed ? colors.border : statusColor,
-          opacity: grayed ? 0.6 : 1,
-        },
-      ]}
-    >
-      <View style={[styles.statusBar, { backgroundColor: grayed ? colors.border : statusColor }]} />
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <SensorIcon id={sensor.id} />
-          <View style={styles.labelRow}>
+    <Pressable onPress={handlePress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
+      <Animated.View style={cardStyle}>
+        <View style={[styles.statusBar, { backgroundColor: grayed ? colors.border : statusColor }]} />
+        <View style={styles.content}>
+          <View style={styles.header}>
+            <SensorIcon id={sensor.id} />
+            <View style={styles.labelRow}>
+              <Text style={[styles.label, { color: colors.mutedForeground }]} numberOfLines={1}>
+                {sensor.label.toUpperCase()}
+              </Text>
+              <Animated.View style={dotStyle} />
+            </View>
+          </View>
+
+          <View style={styles.valueRow}>
             <Text
-              style={[styles.label, { color: colors.mutedForeground }]}
+              style={[styles.value, { color: grayed ? colors.mutedForeground : colors.foreground }]}
+              adjustsFontSizeToFit
               numberOfLines={1}
             >
-              {sensor.label.toUpperCase()}
+              {formatValue()}
             </Text>
-            <Animated.View
-              style={[
-                styles.statusDot,
-                { backgroundColor: grayed ? colors.border : statusColor, opacity: pulseAnim },
-              ]}
-            />
+            {sensor.unit ? (
+              <Text style={[styles.unit, { color: colors.mutedForeground }]}>{sensor.unit}</Text>
+            ) : null}
+            {!grayed && (
+              <View style={styles.trendBadge}>
+                <TrendArrow history={history} color={statusColor} />
+              </View>
+            )}
           </View>
-        </View>
 
-        <View style={styles.valueRow}>
           <Text
-            style={[
-              styles.value,
-              { color: grayed ? colors.mutedForeground : colors.foreground },
-            ]}
-            adjustsFontSizeToFit
-            numberOfLines={1}
+            style={[styles.descriptor, { color: grayed ? colors.mutedForeground : colors.secondaryForeground }]}
+            numberOfLines={2}
           >
-            {formatValue()}
+            {grayed ? "— Cached data" : sensor.descriptor.split("— ")[1] ?? sensor.descriptor}
           </Text>
-          {sensor.unit ? (
-            <Text style={[styles.unit, { color: colors.mutedForeground }]}>
-              {sensor.unit}
-            </Text>
-          ) : null}
-          {!grayed && (
-            <View style={styles.trendBadge}>
-              <TrendArrow history={history} color={statusColor} />
+
+          {!grayed && history.length >= 2 && (
+            <View style={styles.sparklineWrap}>
+              <Sparkline data={history} color={sparkColor} width={120} height={36} />
             </View>
           )}
+
+          <Text style={[styles.timestamp, { color: colors.mutedForeground }]}>
+            Updated {formatTime(sensor.timestamp)}
+          </Text>
         </View>
-
-        <Text
-          style={[styles.descriptor, { color: grayed ? colors.mutedForeground : colors.secondaryForeground }]}
-          numberOfLines={2}
-        >
-          {grayed ? "— Cached data" : sensor.descriptor.split("— ")[1] ?? sensor.descriptor}
-        </Text>
-
-        {!grayed && history.length >= 2 && (
-          <View style={styles.sparklineWrap}>
-            <Sparkline data={history} color={sparkColor} width={120} height={36} />
-          </View>
-        )}
-
-        <Text style={[styles.timestamp, { color: colors.mutedForeground }]}>
-          Updated {formatTime(sensor.timestamp)}
-        </Text>
-      </View>
-    </Animated.View>
+      </Animated.View>
+    </Pressable>
   );
 }
 
