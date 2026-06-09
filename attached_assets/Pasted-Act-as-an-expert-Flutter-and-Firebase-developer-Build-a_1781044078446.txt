@@ -1,0 +1,42 @@
+Act as an expert Flutter and Firebase developer. Build a clean, high-contrast, production-ready mobile application for a smart greenhouse called "auTOMATO". The UI must be optimized for field environments (large touch targets, easy to read under direct sunlight, and single-handed thumb navigation).
+
+The application requires the following specific components and data integrations:
+
+1. THE "AT-A-GLANCE" SMART DASHBOARD (HIGHLY INFORMATIVE):
+The home dashboard must instantly tell the user exactly what is happening in plain English. 
+- At the very top, feature a prominent "Greenhouse Status Summary Banner". 
+  - If all sensors are within safe limits, display a large green banner: "🌱 Your greenhouse is stable. Systems are running smoothly."
+  - If a sensor breaches a threshold, dynamically change the banner to a high-contrast warning (e.g., "⚠️ Warning: Temperature is too high. Exhaust fan has been activated to cool down.").
+- Below the summary, display the 6 core environmental metrics using large, bold fonts and high-contrast, color-coded borders (Green for optimal, Yellow for warning, Red for critical based on custom numeric limits):
+  - Temperature (°C)
+  - Air Humidity (%)
+  - Light Intensity (Lux)
+  - Soil Moisture (%)
+  - pH Level (0-14)
+  - Electrical Conductivity (EC in mS/cm)
+- Each sensor card must include a mini-descriptor explaining its current state relative to the plants (e.g., instead of just "78%", show "78% - Soil is perfectly hydrated" or "32°C - Too hot for optimal growth"). Always include a clear timestamp of the last database update.
+
+2. DEVICE CONTROLS (ACTUATORS):
+Create a control panel layout to manage 4 physical high-voltage AC devices. Each device must feature a 3-way segmented toggle switch with options for [AUTO], [FORCE ON], and [FORCE OFF]:
+- Exhaust Fan
+- Ventilation Fans
+- Water Pump
+- Grow Lights
+*Safety Rule:* Clicking any manual override button (FORCE ON/OFF) must trigger a quick confirmation popup modal before the command executes to prevent accidental triggers.
+
+3. HARDWARE LIVE STATUS & NETWORK RESILIENCE:
+- Implement a global system health checker. Display subtle green/red connectivity badges indicating if the microcontroller hardware is active or offline.
+- Offline Mode: If internet connectivity drops, the app must gracefully cache and display the last known sensor values (grayed out) with a banner stating "Viewing Cached Data - Offline Mode", rather than breaking or showing blank screens.
+
+4. VISUAL & CAMERA COMPONENT:
+- Build a dedicated screen for image monitoring. Include a video container placeholder labeled with a pulsing "LIVE" badge and a network signal strength indicator.
+- Below the feed, include a "Capture Snapshot" button and a clean thumbnail gallery grid displaying historical saved photos organized by date and time.
+
+5. USER INTERFACE & NAVIGATION:
+Build a highly intuitive layout utilizing a standard Bottom Navigation Bar with 4 tabs:
+- Tab 1: Dashboard (The upgraded informative summary banner and the 6 descriptive sensor cards).
+- Tab 2: Controls (The 3-way actuator switches and a read-only section below listing active automation rules).
+- Tab 3: Camera Feed (Live view placeholder, photo actions, and timeline photo gallery).
+- Tab 4: Alerts & Logs (A simple chronological history list tracking past threshold breaches and system notifications).
+
+Provide the full clean source code, clear folder directory structure, and instructions to link the database.
