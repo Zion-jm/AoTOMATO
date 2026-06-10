@@ -334,6 +334,148 @@ function RiskCard({ domain }: { domain: RiskDomain }) {
   );
 }
 
+function buildConditionReport(
+  sensors: ReturnType<typeof useGreenhouse>["sensors"],
+  sensorHistory: Record<string, number[]>
+): string {
+  const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  const warnings = sensors.filter((s) => s.status === "warning");
+  const criticals = sensors.filter((s) => s.status === "critical");
+
+  const riskResults = RISK_DOMAINS.map((d) => ({
+    domain: d,
+    result: evaluateRisk(d, sensorHistory),
+  })).filter((r) => r.result.level !== "safe")
+    .sort((a, b) => {
+      const order = { critical: 0, alert: 1, watch: 2, safe: 3 };
+      return order[a.result.level] - order[b.result.level];
+    });
+
+  const parts: string[] = [];
+
+  // Opening
+  if (criticals.length === 0 && warnings.length === 0) {
+    parts.push(`As of ${now}, all six sensors are reading within optimal ranges — the greenhouse environment is fully healthy.`);
+  } else if (criticals.length > 0) {
+    const names = criticals.map((s) => s.label.toLowerCase()).join(" and ");
+    parts.push(`As of ${now}, the greenhouse is under stress. ${criticals.length === 1 ? "One sensor — " + names + " — is" : names + " are"} at a critical level, requiring immediate attention.`);
+  } else {
+    const names = warnings.map((s) => s.label.toLowerCase()).join(", ");
+    parts.push(`As of ${now}, the greenhouse is in a cautionary state. ${warnings.length === 1 ? names.charAt(0).toUpperCase() + names.slice(1) + " is" : warnings.length + " sensors (" + names + ") are"} outside optimal bounds.`);
+  }
+
+  // Sensor highlights
+  const temp = sensors.find((s) => s.id === "temperature");
+  const hum = sensors.find((s) => s.id === "humidity");
+  const soil = sensors.find((s) => s.id === "soilMoisture");
+  const ph = sensors.find((s) => s.id === "ph");
+
+  if (temp) {
+    if (temp.status === "optimal") {
+      parts.push(`Temperature is steady at ${temp.value.toFixed(1)}°C, well within the 18–26°C ideal window for tomato growth.`);
+    } else if (temp.status === "warning") {
+      parts.push(`Temperature at ${temp.value.toFixed(1)}°C is above the optimal ceiling — pollen viability may be reduced if it continues to rise.`);
+    } else {
+      parts.push(`Temperature at ${temp.value.toFixed(1)}°C is at a critical level and poses an immediate risk to plant health.`);
+    }
+  }
+
+  if (hum) {
+    if (hum.status === "optimal") {
+      parts.push(`Humidity is at ${Math.round(hum.value)}%, providing good conditions for transpiration without disease pressure.`);
+    } else if (hum.value > 80) {
+      parts.push(`Humidity has climbed to ${Math.round(hum.value)}% — sustained levels above 80% create conditions favourable for mould and blight.`);
+    } else {
+      parts.push(`Humidity is at ${Math.round(hum.value)}%, which is lower than ideal and may cause plant stress.`);
+    }
+  }
+
+  if (soil) {
+    if (soil.status === "optimal") {
+      parts.push(`Soil moisture at ${Math.round(soil.value)}% is in a healthy range, keeping roots well-hydrated.`);
+    } else if (soil.value < 60) {
+      parts.push(`Soil moisture has dipped to ${Math.round(soil.value)}% — below 60% the root zone begins to experience water stress.`);
+    } else {
+      parts.push(`Soil moisture at ${Math.round(soil.value)}% is high; ensure drainage is adequate to avoid waterlogging.`);
+    }
+  }
+
+  if (ph && ph.status !== "optimal") {
+    parts.push(`pH is drifting to ${ph.value.toFixed(2)}, outside the 6.0–7.0 optimal window — nutrient availability may be compromised.`);
+  }
+
+  // GRiPS predictions
+  if (riskResults.length === 0) {
+    parts.push(`GRiPS risk modeling shows no imminent threshold breaches across all six monitored domains.`);
+  } else {
+    const top = riskResults[0];
+    const levelWord = top.result.level === "critical" ? "critical" : top.result.level === "alert" ? "elevated" : "developing";
+    if (top.result.minsToBreach !== null) {
+      parts.push(`GRiPS has flagged ${levelWord} risk of ${top.domain.name} — at the current trend, a threshold breach is projected in approximately ${Math.round(top.result.minsToBreach)} minute${Math.round(top.result.minsToBreach) === 1 ? "" : "s"}.`);
+    } else {
+      parts.push(`GRiPS has flagged ${levelWord} risk of ${top.domain.name} based on current sensor readings.`);
+    }
+    if (riskResults.length > 1) {
+      const others = riskResults.slice(1).map((r) => r.domain.name).join(", ");
+      parts.push(`Additional risk domains under watch: ${others}.`);
+    }
+  }
+
+  // Closing recommendation
+  if (criticals.length > 0 || riskResults.some((r) => r.result.level === "critical")) {
+    parts.push(`Immediate intervention is recommended — check automation settings and inspect the affected systems.`);
+  } else if (warnings.length > 0 || riskResults.length > 0) {
+    parts.push(`Continue monitoring closely. Automation rules should manage the current conditions, but manual review is advised within the next hour.`);
+  } else {
+    parts.push(`No action required. The greenhouse is running well within all safety margins.`);
+  }
+
+  return parts.join(" ");
+}
+
+function ConditionReportCard() {
+  const colors = useColors();
+  const { sensors, sensorHistory } = useGreenhouse();
+
+  const report = useMemo(
+    () => buildConditionReport(sensors, sensorHistory),
+    [sensors, sensorHistory]
+  );
+
+  const hasRisks = sensors.some((s) => s.status !== "optimal");
+  const hasCritical = sensors.some((s) => s.status === "critical");
+  const accentColor = hasCritical ? colors.critical : hasRisks ? colors.warning : colors.optimal;
+
+  return (
+    <View style={[cr.card, { backgroundColor: colors.card, borderColor: accentColor + "66" }]}>
+      <View style={cr.header}>
+        <View style={[cr.iconWrap, { backgroundColor: accentColor + "22" }]}>
+          <MaterialCommunityIcons
+            name={hasCritical ? "alert-circle" : hasRisks ? "alert" : "check-circle"}
+            size={18}
+            color={accentColor}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[cr.title, { color: colors.foreground }]}>Condition Report</Text>
+          <Text style={[cr.subtitle, { color: colors.mutedForeground }]}>
+            Auto-generated · updates every 6s
+          </Text>
+        </View>
+        <View style={[cr.statusPill, { backgroundColor: accentColor + "22", borderColor: accentColor + "55" }]}>
+          <View style={[cr.pillDot, { backgroundColor: accentColor }]} />
+          <Text style={[cr.pillText, { color: accentColor }]}>
+            {hasCritical ? "CRITICAL" : hasRisks ? "WARNING" : "HEALTHY"}
+          </Text>
+        </View>
+      </View>
+      <View style={[cr.divider, { backgroundColor: colors.border }]} />
+      <Text style={[cr.body, { color: colors.secondaryForeground }]}>{report}</Text>
+    </View>
+  );
+}
+
 function GRiPSSummaryCard() {
   const colors = useColors();
   const benefits = [
@@ -426,6 +568,9 @@ export default function AnalyticsScreen() {
         <Text style={[st.sectionLabel, { color: colors.mutedForeground }]}>LIVE READINGS</Text>
         <SensorSummaryStrip />
 
+        <Text style={[st.sectionLabel, { color: colors.mutedForeground }]}>CONDITION REPORT</Text>
+        <ConditionReportCard />
+
         <Text style={[st.sectionLabel, { color: colors.mutedForeground }]}>RISK PREDICTIONS</Text>
         <Text style={[st.hint, { color: colors.mutedForeground }]}>
           Linear trend forecasts using last {Object.values(sensorHistory)[0]?.length ?? 0} readings
@@ -441,6 +586,19 @@ export default function AnalyticsScreen() {
     </View>
   );
 }
+
+const cr = StyleSheet.create({
+  card: { borderRadius: 14, borderWidth: 1.5, padding: 14, marginBottom: 4 },
+  header: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 10 },
+  iconWrap: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  title: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  subtitle: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 1 },
+  statusPill: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 20, borderWidth: 1 },
+  pillDot: { width: 5, height: 5, borderRadius: 3 },
+  pillText: { fontSize: 9, fontFamily: "Inter_700Bold", letterSpacing: 0.8 },
+  divider: { height: 1, marginBottom: 10 },
+  body: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 21 },
+});
 
 const st = StyleSheet.create({
   container: { flex: 1 },
