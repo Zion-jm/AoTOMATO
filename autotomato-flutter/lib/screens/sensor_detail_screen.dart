@@ -181,7 +181,7 @@ class SensorDetailScreen extends StatelessWidget {
                         borderData: FlBorderData(show: false),
                         lineTouchData: LineTouchData(
                           touchTooltipData: LineTouchTooltipData(
-                            tooltipColor: AppColors.card,
+                            getTooltipColor: (_) => AppColors.card,
                             getTooltipItems: (items) => items.map((item) => LineTooltipItem(
                               formatSensorValue(sensor.id, item.y),
                               GoogleFonts.inter(color: color, fontSize: 12, fontWeight: FontWeight.w600),
