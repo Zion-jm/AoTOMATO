@@ -7,259 +7,376 @@ import {
   Text,
   View,
 } from "react-native";
-import { Svg, Polyline, Line, Rect } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useGreenhouse } from "@/contexts/GreenhouseContext";
 import { useColors } from "@/hooks/useColors";
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 
-const SENSOR_META: Record<string, { icon: IconName; color: string; optMin: number; optMax: number }> = {
-  temperature: { icon: "thermometer", color: "#FB923C", optMin: 18, optMax: 26 },
-  humidity:    { icon: "water-percent", color: "#60A5FA", optMin: 60, optMax: 80 },
-  light:       { icon: "white-balance-sunny", color: "#FACC15", optMin: 3000, optMax: 10000 },
-  soilMoisture:{ icon: "water", color: "#34D399", optMin: 60, optMax: 80 },
-  ph:          { icon: "test-tube", color: "#A78BFA", optMin: 6.0, optMax: 7.0 },
-  ec:          { icon: "lightning-bolt", color: "#F472B6", optMin: 1.5, optMax: 3.0 },
+const SENSOR_META: Record<string, { icon: IconName; color: string; unit: string }> = {
+  temperature:  { icon: "thermometer",        color: "#FB923C", unit: "°C"    },
+  humidity:     { icon: "water-percent",       color: "#60A5FA", unit: "%"     },
+  light:        { icon: "white-balance-sunny", color: "#FACC15", unit: " lux"  },
+  soilMoisture: { icon: "water",               color: "#34D399", unit: "%"     },
+  ph:           { icon: "test-tube",           color: "#A78BFA", unit: ""      },
+  ec:           { icon: "lightning-bolt",      color: "#F472B6", unit: " mS/cm"},
 };
 
-const DEVICE_ICONS: Record<string, IconName> = {
-  exhaust: "fan",
-  ventilation: "fan-auto",
-  pump: "water-pump",
-  lights: "lightbulb-on-outline",
-};
-
-function Sparkline({
-  values,
-  color,
-  width = 80,
-  height = 32,
-}: {
-  values: number[];
-  color: string;
-  width?: number;
-  height?: number;
-}) {
-  if (values.length < 2) return null;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const pad = 2;
-
-  const points = values
-    .map((v, i) => {
-      const x = pad + (i / (values.length - 1)) * (width - pad * 2);
-      const y = pad + (1 - (v - min) / range) * (height - pad * 2);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
-
-  return (
-    <Svg width={width} height={height}>
-      <Polyline
-        points={points}
-        fill="none"
-        stroke={color}
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </Svg>
-  );
-}
-
-function MiniBarChart({
-  values,
-  labels,
-  colors: barColors,
-  width = 200,
-  height = 60,
-}: {
-  values: number[];
-  labels: string[];
-  colors: string[];
-  width?: number;
-  height?: number;
-}) {
-  const max = Math.max(...values, 1);
-  const barW = Math.floor((width - (values.length - 1) * 8) / values.length);
-  return (
-    <Svg width={width} height={height}>
-      {values.map((v, i) => {
-        const barH = Math.max(2, (v / max) * (height - 4));
-        const x = i * (barW + 8);
-        const y = height - barH;
-        return (
-          <Rect
-            key={i}
-            x={x}
-            y={y}
-            width={barW}
-            height={barH}
-            rx={3}
-            fill={barColors[i]}
-            opacity={0.85}
-          />
-        );
-      })}
-    </Svg>
-  );
-}
-
-function KpiCard({ label, value, sub, icon, iconColor }: {
-  label: string;
-  value: string | number;
-  sub?: string;
+interface RiskDomain {
+  id: string;
+  name: string;
   icon: IconName;
-  iconColor: string;
-}) {
-  const colors = useColors();
-  return (
-    <View style={[kpi.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <View style={[kpi.iconWrap, { backgroundColor: iconColor + "22" }]}>
-        <MaterialCommunityIcons name={icon} size={18} color={iconColor} />
-      </View>
-      <Text style={[kpi.value, { color: colors.foreground }]}>{value}</Text>
-      <Text style={[kpi.label, { color: colors.mutedForeground }]}>{label}</Text>
-      {sub ? <Text style={[kpi.sub, { color: colors.mutedForeground }]}>{sub}</Text> : null}
-    </View>
-  );
+  color: string;
+  sensorId: string;
+  sensorId2?: string;
+  thresholdLow?: number;
+  thresholdHigh?: number;
+  thresholdLow2?: number;
+  thresholdHigh2?: number;
+  horizon: number;
+  description: string;
 }
 
-function SensorAnalyticsCard({ sensorId, history }: { sensorId: string; history: number[] }) {
+const RISK_DOMAINS: RiskDomain[] = [
+  {
+    id: "thermal",
+    name: "Thermal Runaway",
+    icon: "thermometer-alert",
+    color: "#FB923C",
+    sensorId: "temperature",
+    thresholdHigh: 28,
+    horizon: 30,
+    description: "Cherry tomato pollen viability drops above 29.4°C. Brief heat spikes during flowering can destroy yields.",
+  },
+  {
+    id: "humidity",
+    name: "Humidity Trap",
+    icon: "water-alert",
+    color: "#60A5FA",
+    sensorId: "humidity",
+    thresholdHigh: 75,
+    horizon: 30,
+    description: "Sustained humidity above 75% creates conditions favorable for leaf mold and gray mold development.",
+  },
+  {
+    id: "dryout",
+    name: "Dry-Out",
+    icon: "sprout",
+    color: "#34D399",
+    sensorId: "soilMoisture",
+    thresholdLow: 60,
+    horizon: 60,
+    description: "Root zone stress below 60% moisture risks blossom end rot and reduced nutrient uptake.",
+  },
+  {
+    id: "lightcrash",
+    name: "Light Crash",
+    icon: "lightbulb-alert",
+    color: "#FACC15",
+    sensorId: "light",
+    thresholdLow: 3000,
+    horizon: 30,
+    description: "Photosynthesis rate drops sharply below 3,000 lux, reducing daily carbohydrate production.",
+  },
+  {
+    id: "nutrient",
+    name: "Nutrient Drift",
+    icon: "flask-outline",
+    color: "#A78BFA",
+    sensorId: "ph",
+    sensorId2: "ec",
+    thresholdLow: 5.5,
+    thresholdHigh: 7.5,
+    thresholdLow2: 0.8,
+    thresholdHigh2: 4.0,
+    horizon: 120,
+    description: "pH or EC outside optimal bands locks out nutrients causing deficiency symptoms within 1–2 days.",
+  },
+  {
+    id: "stall",
+    name: "System Stall",
+    icon: "wifi-alert",
+    color: "#94A3B8",
+    sensorId: "temperature",
+    horizon: 15,
+    description: "Connectivity degradation can create automation blackouts leaving the greenhouse uncontrolled.",
+  },
+];
+
+interface RiskResult {
+  current: number;
+  current2?: number;
+  predicted: number;
+  predicted2?: number;
+  slope: number;
+  minsToBreach: number | null;
+  confidence: number;
+  level: "safe" | "watch" | "alert" | "critical";
+  trendLabel: string;
+}
+
+function computeTrend(history: number[]): { slope: number; confidence: number } {
+  if (history.length < 3) return { slope: 0, confidence: 0 };
+  const recent = history.slice(-12);
+  const n = recent.length;
+  const slope = (recent[n - 1] - recent[0]) / (n - 1);
+  const slopes: number[] = [];
+  for (let i = 1; i < recent.length; i++) slopes.push(recent[i] - recent[i - 1]);
+  const avgSlope = slopes.reduce((a, b) => a + b, 0) / slopes.length;
+  const variance = slopes.reduce((a, b) => a + Math.pow(b - avgSlope, 2), 0) / slopes.length;
+  const cv = Math.sqrt(variance) / (Math.abs(avgSlope) + 0.0001);
+  const confidence = Math.max(30, Math.min(95, Math.round(100 - cv * 15)));
+  return { slope, confidence };
+}
+
+function evaluateRisk(domain: RiskDomain, history: Record<string, number[]>): RiskResult {
+  const h = history[domain.sensorId] ?? [];
+  const h2 = domain.sensorId2 ? (history[domain.sensorId2] ?? []) : [];
+
+  if (h.length < 3) {
+    return { current: 0, slope: 0, predicted: 0, minsToBreach: null, confidence: 0, level: "safe", trendLabel: "—" };
+  }
+
+  const readingsPerMin = 30;
+  const { slope, confidence } = computeTrend(h);
+  const current = h[h.length - 1];
+  const predicted = current + slope * domain.horizon * readingsPerMin;
+
+  let current2: number | undefined;
+  let predicted2: number | undefined;
+  let slope2 = 0;
+  if (h2.length >= 3) {
+    const t2 = computeTrend(h2);
+    slope2 = t2.slope;
+    current2 = h2[h2.length - 1];
+    predicted2 = current2 + t2.slope * domain.horizon * readingsPerMin;
+  }
+
+  if (domain.id === "stall") {
+    return {
+      current,
+      slope,
+      predicted,
+      minsToBreach: null,
+      confidence: 88,
+      level: "safe",
+      trendLabel: "Heartbeat normal",
+    };
+  }
+
+  let minsToBreach: number | null = null;
+
+  if (domain.thresholdHigh !== undefined && slope > 0 && current < domain.thresholdHigh) {
+    const mins = ((domain.thresholdHigh - current) / slope) / readingsPerMin;
+    if (mins > 0 && mins <= 120) minsToBreach = mins;
+  }
+  if (domain.thresholdLow !== undefined && slope < 0 && current > domain.thresholdLow) {
+    const mins = ((current - domain.thresholdLow) / (-slope)) / readingsPerMin;
+    if (mins > 0 && mins <= 120 && (minsToBreach === null || mins < minsToBreach)) minsToBreach = mins;
+  }
+
+  if (domain.sensorId2 && h2.length >= 3 && current2 !== undefined) {
+    if (domain.thresholdHigh2 !== undefined && slope2 > 0 && current2 < domain.thresholdHigh2) {
+      const mins = ((domain.thresholdHigh2 - current2) / slope2) / readingsPerMin;
+      if (mins > 0 && mins <= 120 && (minsToBreach === null || mins < minsToBreach)) minsToBreach = mins;
+    }
+    if (domain.thresholdLow2 !== undefined && slope2 < 0 && current2 > domain.thresholdLow2) {
+      const mins = ((current2 - domain.thresholdLow2) / (-slope2)) / readingsPerMin;
+      if (mins > 0 && mins <= 120 && (minsToBreach === null || mins < minsToBreach)) minsToBreach = mins;
+    }
+  }
+
+  const atRisk = domain.thresholdHigh !== undefined
+    ? current >= domain.thresholdHigh * 0.95
+    : domain.thresholdLow !== undefined
+      ? current <= domain.thresholdLow * 1.05
+      : false;
+
+  let level: RiskResult["level"] = "safe";
+  if (atRisk) {
+    level = "critical";
+  } else if (minsToBreach !== null && minsToBreach <= 15) {
+    level = "critical";
+  } else if (minsToBreach !== null && minsToBreach <= 30) {
+    level = "alert";
+  } else if (minsToBreach !== null && minsToBreach <= 60) {
+    level = "watch";
+  }
+
+  const slopePerMin = slope * readingsPerMin;
+  const absSlopePerMin = Math.abs(slopePerMin);
+  const isRising = slope > 0;
+  let trendLabel = "Stable";
+  if (absSlopePerMin > 0.05) {
+    trendLabel = isRising ? `+${slopePerMin.toFixed(2)}/min ↑` : `${slopePerMin.toFixed(2)}/min ↓`;
+  }
+
+  return { current, current2, predicted, predicted2, slope, minsToBreach, confidence, level, trendLabel };
+}
+
+function formatSensorVal(id: string, v: number): string {
+  if (id === "temperature") return v.toFixed(1) + "°C";
+  if (id === "ph")          return v.toFixed(2);
+  if (id === "ec")          return v.toFixed(2) + " mS/cm";
+  if (id === "light")       return Math.round(v) + " lux";
+  return Math.round(v) + "%";
+}
+
+function SensorSummaryStrip() {
   const colors = useColors();
   const { sensors } = useGreenhouse();
-  const sensor = sensors.find((s) => s.id === sensorId);
-  const meta = SENSOR_META[sensorId];
-
-  const stats = useMemo(() => {
-    if (!history || history.length === 0) return { min: 0, max: 0, avg: 0, pctOptimal: 0, pctWarning: 0, pctCritical: 0 };
-    const min = Math.min(...history);
-    const max = Math.max(...history);
-    const avg = history.reduce((a, b) => a + b, 0) / history.length;
-    const optimal = history.filter((v) => v >= meta.optMin && v <= meta.optMax).length;
-    const total = history.length;
-    const pctOptimal = (optimal / total) * 100;
-    const remaining = 100 - pctOptimal;
-    const pctCritical = history.filter((v) => v < meta.optMin * 0.7 || v > meta.optMax * 1.3).length / total * 100;
-    const pctWarning = Math.max(0, remaining - pctCritical);
-    return { min, max, avg, pctOptimal, pctWarning, pctCritical };
-  }, [history, meta]);
-
-  if (!sensor) return null;
-
-  const statusColor =
-    sensor.status === "optimal" ? colors.optimal :
-    sensor.status === "warning" ? colors.warning : colors.critical;
-
-  const formatVal = (v: number) => {
-    if (sensorId === "temperature") return v.toFixed(1) + "°C";
-    if (sensorId === "ph") return v.toFixed(2);
-    if (sensorId === "ec") return v.toFixed(2);
-    if (sensorId === "light") return Math.round(v) + " lux";
-    return Math.round(v) + "%";
-  };
 
   return (
-    <View style={[card.wrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
-      <View style={card.topRow}>
-        <View style={card.titleGroup}>
-          <View style={[card.iconWrap, { backgroundColor: meta.color + "22" }]}>
-            <MaterialCommunityIcons name={meta.icon} size={16} color={meta.color} />
+    <View style={strip.row}>
+      {sensors.map((s) => {
+        const meta = SENSOR_META[s.id];
+        const statusColor =
+          s.status === "optimal" ? colors.optimal :
+          s.status === "warning"  ? colors.warning  : colors.critical;
+        return (
+          <View key={s.id} style={[strip.chip, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <MaterialCommunityIcons name={meta?.icon ?? "alert"} size={14} color={meta?.color ?? colors.mutedForeground} />
+            <Text style={[strip.val, { color: colors.foreground }]}>
+              {formatSensorVal(s.id, s.value)}
+            </Text>
+            <View style={[strip.dot, { backgroundColor: statusColor }]} />
           </View>
-          <View>
-            <Text style={[card.title, { color: colors.foreground }]}>{sensor.label}</Text>
-            <View style={[card.badge, { backgroundColor: statusColor + "22" }]}>
-              <View style={[card.dot, { backgroundColor: statusColor }]} />
-              <Text style={[card.badgeText, { color: statusColor }]}>
-                {sensor.status.toUpperCase()}
-              </Text>
-            </View>
-          </View>
-        </View>
-        <View style={card.rightGroup}>
-          <Text style={[card.currentVal, { color: colors.foreground }]}>
-            {formatVal(sensor.value)}
-          </Text>
-          <Sparkline values={history} color={meta.color} width={72} height={28} />
-        </View>
-      </View>
-
-      <View style={card.statsRow}>
-        <View style={card.statItem}>
-          <Text style={[card.statLabel, { color: colors.mutedForeground }]}>MIN</Text>
-          <Text style={[card.statValue, { color: colors.secondaryForeground }]}>{formatVal(stats.min)}</Text>
-        </View>
-        <View style={card.statItem}>
-          <Text style={[card.statLabel, { color: colors.mutedForeground }]}>AVG</Text>
-          <Text style={[card.statValue, { color: colors.foreground }]}>{formatVal(stats.avg)}</Text>
-        </View>
-        <View style={card.statItem}>
-          <Text style={[card.statLabel, { color: colors.mutedForeground }]}>MAX</Text>
-          <Text style={[card.statValue, { color: colors.secondaryForeground }]}>{formatVal(stats.max)}</Text>
-        </View>
-        <View style={card.statItem}>
-          <Text style={[card.statLabel, { color: colors.mutedForeground }]}>OPTIMAL</Text>
-          <Text style={[card.statValue, { color: colors.optimal }]}>{stats.pctOptimal.toFixed(0)}%</Text>
-        </View>
-      </View>
-
-      <View style={[card.statusBar, { backgroundColor: colors.secondary }]}>
-        {stats.pctOptimal > 0 && (
-          <View style={[card.statusSegment, { width: `${stats.pctOptimal}%` as any, backgroundColor: colors.optimal }]} />
-        )}
-        {stats.pctWarning > 0 && (
-          <View style={[card.statusSegment, { width: `${stats.pctWarning}%` as any, backgroundColor: colors.warning }]} />
-        )}
-        {stats.pctCritical > 0 && (
-          <View style={[card.statusSegment, { width: `${stats.pctCritical}%` as any, backgroundColor: colors.critical }]} />
-        )}
-      </View>
-      <View style={card.statusLegend}>
-        <View style={card.legendItem}>
-          <View style={[card.legendDot, { backgroundColor: colors.optimal }]} />
-          <Text style={[card.legendText, { color: colors.mutedForeground }]}>Optimal {stats.pctOptimal.toFixed(0)}%</Text>
-        </View>
-        <View style={card.legendItem}>
-          <View style={[card.legendDot, { backgroundColor: colors.warning }]} />
-          <Text style={[card.legendText, { color: colors.mutedForeground }]}>Warning {stats.pctWarning.toFixed(0)}%</Text>
-        </View>
-        <View style={card.legendItem}>
-          <View style={[card.legendDot, { backgroundColor: colors.critical }]} />
-          <Text style={[card.legendText, { color: colors.mutedForeground }]}>Critical {stats.pctCritical.toFixed(0)}%</Text>
-        </View>
-      </View>
+        );
+      })}
     </View>
   );
 }
 
-function DeviceCard({ device }: { device: ReturnType<typeof useGreenhouse>["devices"][0] }) {
+function RiskCard({ domain }: { domain: RiskDomain }) {
   const colors = useColors();
-  const isRunning = device.isRunning;
-  const dotColor = isRunning ? colors.optimal : colors.mutedForeground;
-  const borderColor = isRunning ? colors.optimal + "66" : colors.border;
+  const { sensorHistory } = useGreenhouse();
+  const result = useMemo(() => evaluateRisk(domain, sensorHistory), [domain, sensorHistory]);
+
+  const LEVEL_CONFIG = {
+    safe:     { label: "SAFE",     bg: colors.optimal + "22",  border: colors.optimal + "55",  text: colors.optimal  },
+    watch:    { label: "WATCH",    bg: "#FACC1522",             border: "#FACC1555",             text: "#FACC15"       },
+    alert:    { label: "ALERT",    bg: colors.warning + "22",   border: colors.warning + "55",   text: colors.warning  },
+    critical: { label: "CRITICAL", bg: colors.critical + "22",  border: colors.critical + "55",  text: colors.critical },
+  };
+  const cfg = LEVEL_CONFIG[result.level];
+
+  const sensorId2 = domain.sensorId2;
+  const primaryLabel = SENSOR_META[domain.sensorId]
+    ? domain.sensorId.charAt(0).toUpperCase() + domain.sensorId.slice(1)
+    : domain.sensorId;
 
   return (
-    <View style={[devCard.wrap, { backgroundColor: colors.card, borderColor }]}>
-      <View style={[devCard.iconWrap, { backgroundColor: (isRunning ? colors.optimal : colors.mutedForeground) + "22" }]}>
-        <MaterialCommunityIcons
-          name={(DEVICE_ICONS[device.id] ?? "cog") as any}
-          size={20}
-          color={isRunning ? colors.optimal : colors.mutedForeground}
-        />
+    <View style={[rc.wrap, { backgroundColor: colors.card, borderColor: cfg.border }]}>
+      <View style={rc.topRow}>
+        <View style={rc.left}>
+          <View style={[rc.iconWrap, { backgroundColor: domain.color + "22" }]}>
+            <MaterialCommunityIcons name={domain.icon} size={18} color={domain.color} />
+          </View>
+          <View>
+            <Text style={[rc.name, { color: colors.foreground }]}>{domain.name}</Text>
+            <Text style={[rc.trend, { color: colors.mutedForeground }]}>{result.trendLabel}</Text>
+          </View>
+        </View>
+        <View style={[rc.levelBadge, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
+          <Text style={[rc.levelText, { color: cfg.text }]}>{cfg.label}</Text>
+        </View>
       </View>
-      <Text style={[devCard.name, { color: colors.foreground }]} numberOfLines={1}>{device.name}</Text>
-      <View style={devCard.statusRow}>
-        <View style={[devCard.dot, { backgroundColor: dotColor }]} />
-        <Text style={[devCard.statusText, { color: dotColor }]}>
-          {device.mode !== "AUTO"
-            ? device.mode.replace("_", " ")
-            : isRunning ? "Running" : "Standby"}
+
+      <View style={rc.metricsRow}>
+        <View style={rc.metric}>
+          <Text style={[rc.metricLabel, { color: colors.mutedForeground }]}>NOW</Text>
+          <Text style={[rc.metricValue, { color: colors.foreground }]}>
+            {domain.id === "stall" ? "Online" : formatSensorVal(domain.sensorId, result.current)}
+          </Text>
+        </View>
+        <View style={rc.metric}>
+          <Text style={[rc.metricLabel, { color: colors.mutedForeground }]}>
+            IN {domain.horizon} MIN
+          </Text>
+          <Text style={[rc.metricValue, { color: result.level === "safe" ? colors.foreground : cfg.text }]}>
+            {domain.id === "stall" ? "Stable" : formatSensorVal(domain.sensorId, result.predicted)}
+          </Text>
+        </View>
+        <View style={rc.metric}>
+          <Text style={[rc.metricLabel, { color: colors.mutedForeground }]}>BREACH IN</Text>
+          <Text style={[rc.metricValue, { color: result.minsToBreach ? cfg.text : colors.optimal }]}>
+            {result.minsToBreach
+              ? `~${Math.round(result.minsToBreach)}m`
+              : domain.id === "stall" ? "N/A" : "—"}
+          </Text>
+        </View>
+        <View style={rc.metric}>
+          <Text style={[rc.metricLabel, { color: colors.mutedForeground }]}>CONFIDENCE</Text>
+          <Text style={[rc.metricValue, { color: colors.secondaryForeground }]}>
+            {result.confidence}%
+          </Text>
+        </View>
+      </View>
+
+      {sensorId2 && result.current2 !== undefined && (
+        <View style={[rc.secondaryRow, { borderTopColor: colors.border }]}>
+          <MaterialCommunityIcons
+            name={(SENSOR_META[sensorId2]?.icon ?? "alert") as any}
+            size={12}
+            color={SENSOR_META[sensorId2]?.color ?? colors.mutedForeground}
+          />
+          <Text style={[rc.secondaryText, { color: colors.mutedForeground }]}>
+            {sensorId2.toUpperCase()}: {formatSensorVal(sensorId2, result.current2)}
+            {result.predicted2 !== undefined
+              ? ` → ${formatSensorVal(sensorId2, result.predicted2)} in ${domain.horizon}m`
+              : ""}
+          </Text>
+        </View>
+      )}
+
+      <Text style={[rc.desc, { color: colors.mutedForeground }]}>{domain.description}</Text>
+    </View>
+  );
+}
+
+function GRiPSSummaryCard() {
+  const colors = useColors();
+  const benefits = [
+    { icon: "cpu-64-bit" as IconName,       text: "Zero new hardware — runs on existing sensors" },
+    { icon: "clock-fast" as IconName,        text: "15–60 min early warning before threshold breach" },
+    { icon: "shield-check" as IconName,      text: "Auto-prevention triggers devices before damage" },
+    { icon: "calculator" as IconName,        text: "Fully explainable linear trend math" },
+    { icon: "lightning-bolt" as IconName,    text: "Energy efficient: brief pre-cooling vs extended emergency" },
+    { icon: "cloud-off-outline" as IconName, text: "Continues automation during internet outages" },
+  ];
+
+  return (
+    <View style={[gs.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+      <View style={gs.header}>
+        <View style={[gs.iconWrap, { backgroundColor: colors.primary + "22" }]}>
+          <MaterialCommunityIcons name="leaf-circle" size={22} color={colors.primary} />
+        </View>
+        <View>
+          <Text style={[gs.title, { color: colors.foreground }]}>About GRiPS</Text>
+          <Text style={[gs.subtitle, { color: colors.mutedForeground }]}>Greenhouse Risk Prediction System</Text>
+        </View>
+      </View>
+
+      <Text style={[gs.body, { color: colors.secondaryForeground }]}>
+        GRiPS transforms auTOMATO from a reactive monitor into a proactive guardian. Using simple
+        linear trend math on live sensor data, it forecasts environmental problems 15 to 60 minutes
+        before they occur — and acts automatically when farmers are absent, working, or sleeping.
+      </Text>
+
+      <View style={[gs.divider, { backgroundColor: colors.border }]} />
+
+      <Text style={[gs.benefitsTitle, { color: colors.mutedForeground }]}>KEY BENEFITS</Text>
+      {benefits.map(({ icon, text }) => (
+        <View key={text} style={gs.benefitRow}>
+          <MaterialCommunityIcons name={icon} size={14} color={colors.primary} />
+          <Text style={[gs.benefitText, { color: colors.secondaryForeground }]}>{text}</Text>
+        </View>
+      ))}
+
+      <View style={[gs.footer, { borderTopColor: colors.border }]}>
+        <Text style={[gs.footerText, { color: colors.mutedForeground }]}>
+          Polytechnic University of the Philippines, Lopez Campus · AuTOMATO Project
         </Text>
-      </View>
-      <View style={[devCard.modeBadge, { backgroundColor: colors.secondary }]}>
-        <Text style={[devCard.modeText, { color: colors.autoColor }]}>{device.mode}</Text>
       </View>
     </View>
   );
@@ -268,438 +385,111 @@ function DeviceCard({ device }: { device: ReturnType<typeof useGreenhouse>["devi
 export default function AnalyticsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { sensors, sensorHistory, devices, alerts } = useGreenhouse();
+  const { sensorHistory } = useGreenhouse();
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
 
-  const criticalCount = alerts.filter((a) => a.severity === "critical").length;
-  const warningCount = alerts.filter((a) => a.severity === "warning").length;
-  const infoCount = alerts.filter((a) => a.severity === "info").length;
-  const runningDevices = devices.filter((d) => d.isRunning).length;
-  const optimalSensors = sensors.filter((s) => s.status === "optimal").length;
-  const healthScore = Math.round((optimalSensors / sensors.length) * 100);
-
-  const alertBySensor = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const a of alerts) {
-      if (a.sensor) counts[a.sensor] = (counts[a.sensor] ?? 0) + 1;
-    }
-    return Object.entries(counts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 4);
-  }, [alerts]);
+  const activeRisks = useMemo(() => {
+    return RISK_DOMAINS.filter((d) => {
+      const r = evaluateRisk(d, sensorHistory);
+      return r.level !== "safe";
+    }).length;
+  }, [sensorHistory]);
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
+    <View style={[st.container, { backgroundColor: colors.background }]}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        contentContainerStyle={[
-          styles.content,
-          { paddingTop: topPad + 16, paddingBottom: bottomPad + 90 },
-        ]}
+        contentContainerStyle={[st.content, { paddingTop: topPad + 16, paddingBottom: bottomPad + 90 }]}
       >
-        <Text style={[styles.screenTitle, { color: colors.foreground }]}>Analytics</Text>
-        <Text style={[styles.screenSubtitle, { color: colors.mutedForeground }]}>
-          Live greenhouse performance
-        </Text>
-
-        <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>OVERVIEW</Text>
-        <View style={styles.kpiRow}>
-          <KpiCard
-            label="Health Score"
-            value={`${healthScore}%`}
-            sub={`${optimalSensors}/${sensors.length} optimal`}
-            icon="leaf"
-            iconColor={colors.optimal}
-          />
-          <KpiCard
-            label="Active Alerts"
-            value={alerts.length}
-            sub={criticalCount > 0 ? `${criticalCount} critical` : "none critical"}
-            icon="bell-alert"
-            iconColor={criticalCount > 0 ? colors.critical : colors.warning}
-          />
-          <KpiCard
-            label="Devices On"
-            value={`${runningDevices}/${devices.length}`}
-            sub="running now"
-            icon="power"
-            iconColor={colors.autoColor}
-          />
+        <View style={st.headerRow}>
+          <View>
+            <Text style={[st.title, { color: colors.foreground }]}>GRiPS</Text>
+            <Text style={[st.subtitle, { color: colors.mutedForeground }]}>Risk Prediction System</Text>
+          </View>
+          <View style={[st.activeBadge, {
+            backgroundColor: activeRisks > 0 ? colors.warning + "22" : colors.optimal + "22",
+            borderColor: activeRisks > 0 ? colors.warning + "55" : colors.optimal + "55",
+          }]}>
+            <MaterialCommunityIcons
+              name={activeRisks > 0 ? "alert" : "shield-check"}
+              size={14}
+              color={activeRisks > 0 ? colors.warning : colors.optimal}
+            />
+            <Text style={[st.activeBadgeText, { color: activeRisks > 0 ? colors.warning : colors.optimal }]}>
+              {activeRisks > 0 ? `${activeRisks} risk${activeRisks > 1 ? "s" : ""} detected` : "All clear"}
+            </Text>
+          </View>
         </View>
 
-        <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-          SENSOR TRENDS
+        <Text style={[st.sectionLabel, { color: colors.mutedForeground }]}>LIVE READINGS</Text>
+        <SensorSummaryStrip />
+
+        <Text style={[st.sectionLabel, { color: colors.mutedForeground }]}>RISK PREDICTIONS</Text>
+        <Text style={[st.hint, { color: colors.mutedForeground }]}>
+          Linear trend forecasts using last {Object.values(sensorHistory)[0]?.length ?? 0} readings
         </Text>
-        <Text style={[styles.sectionHint, { color: colors.mutedForeground }]}>
-          Last {sensorHistory.temperature?.length ?? 0} readings · updates every 2s
-        </Text>
-        {Object.keys(SENSOR_META).map((id) => (
-          <SensorAnalyticsCard
-            key={id}
-            sensorId={id}
-            history={sensorHistory[id] ?? []}
-          />
+
+        {RISK_DOMAINS.map((domain) => (
+          <RiskCard key={domain.id} domain={domain} />
         ))}
 
-        <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-          DEVICE STATUS
-        </Text>
-        <View style={styles.deviceGrid}>
-          {devices.map((d) => (
-            <DeviceCard key={d.id} device={d} />
-          ))}
-        </View>
-
-        <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-          ALERT SUMMARY
-        </Text>
-        <View style={[styles.alertSummaryCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <View style={styles.alertSeverityRow}>
-            {[
-              { label: "Critical", count: criticalCount, color: colors.critical },
-              { label: "Warning", count: warningCount, color: colors.warning },
-              { label: "Info", count: infoCount, color: colors.autoColor },
-            ].map(({ label, count, color }) => (
-              <View key={label} style={styles.severityBlock}>
-                <Text style={[styles.severityCount, { color }]}>{count}</Text>
-                <Text style={[styles.severityLabel, { color: colors.mutedForeground }]}>{label}</Text>
-              </View>
-            ))}
-          </View>
-
-          {alertBySensor.length > 0 && (
-            <>
-              <View style={[styles.divider, { backgroundColor: colors.border }]} />
-              <Text style={[styles.chartTitle, { color: colors.mutedForeground }]}>
-                ALERTS BY SENSOR
-              </Text>
-              <View style={styles.alertBars}>
-                {alertBySensor.map(([sensorId, count]) => {
-                  const maxCount = alertBySensor[0][1];
-                  const meta = SENSOR_META[sensorId];
-                  return (
-                    <View key={sensorId} style={styles.alertBarRow}>
-                      <MaterialCommunityIcons
-                        name={(meta?.icon ?? "alert") as any}
-                        size={13}
-                        color={meta?.color ?? colors.mutedForeground}
-                        style={styles.alertBarIcon}
-                      />
-                      <Text style={[styles.alertBarLabel, { color: colors.secondaryForeground }]}>
-                        {sensorId === "soilMoisture" ? "Moisture" : sensorId.charAt(0).toUpperCase() + sensorId.slice(1)}
-                      </Text>
-                      <View style={[styles.alertBarTrack, { backgroundColor: colors.secondary }]}>
-                        <View
-                          style={[
-                            styles.alertBarFill,
-                            {
-                              width: `${(count / maxCount) * 100}%` as any,
-                              backgroundColor: meta?.color ?? colors.primary,
-                            },
-                          ]}
-                        />
-                      </View>
-                      <Text style={[styles.alertBarCount, { color: colors.mutedForeground }]}>
-                        {count}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
-            </>
-          )}
-        </View>
+        <Text style={[st.sectionLabel, { color: colors.mutedForeground }]}>ABOUT</Text>
+        <GRiPSSummaryCard />
       </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const st = StyleSheet.create({
   container: { flex: 1 },
   content: { paddingHorizontal: 16 },
-  screenTitle: {
-    fontSize: 26,
-    fontFamily: "Inter_700Bold",
-    letterSpacing: -0.5,
-  },
-  screenSubtitle: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
-    marginTop: 2,
-    marginBottom: 20,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_600SemiBold",
-    letterSpacing: 1.2,
-    marginBottom: 10,
-    marginTop: 20,
-  },
-  sectionHint: {
-    fontSize: 11,
-    fontFamily: "Inter_400Regular",
-    marginTop: -8,
-    marginBottom: 10,
-  },
-  kpiRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  deviceGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  alertSummaryCard: {
-    borderRadius: 14,
-    borderWidth: 1.5,
-    padding: 16,
-  },
-  alertSeverityRow: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginBottom: 4,
-  },
-  severityBlock: {
-    alignItems: "center",
-    gap: 4,
-  },
-  severityCount: {
-    fontSize: 28,
-    fontFamily: "Inter_700Bold",
-  },
-  severityLabel: {
-    fontSize: 11,
-    fontFamily: "Inter_500Medium",
-  },
-  divider: {
-    height: 1,
-    marginVertical: 14,
-  },
-  chartTitle: {
-    fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
-    letterSpacing: 1,
-    marginBottom: 10,
-  },
-  alertBars: { gap: 8 },
-  alertBarRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  alertBarIcon: { width: 16 },
-  alertBarLabel: {
-    fontSize: 12,
-    fontFamily: "Inter_500Medium",
-    width: 60,
-  },
-  alertBarTrack: {
-    flex: 1,
-    height: 6,
-    borderRadius: 3,
-    overflow: "hidden",
-  },
-  alertBarFill: {
-    height: "100%",
-    borderRadius: 3,
-  },
-  alertBarCount: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-    width: 20,
-    textAlign: "right",
-  },
+  headerRow: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 },
+  title: { fontSize: 28, fontFamily: "Inter_700Bold", letterSpacing: -0.5 },
+  subtitle: { fontSize: 13, fontFamily: "Inter_400Regular", marginTop: 2 },
+  activeBadge: { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 20, borderWidth: 1.5 },
+  activeBadgeText: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  sectionLabel: { fontSize: 11, fontFamily: "Inter_600SemiBold", letterSpacing: 1.2, marginBottom: 10, marginTop: 20 },
+  hint: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: -8, marginBottom: 10 },
 });
 
-const kpi = StyleSheet.create({
-  card: {
-    flex: 1,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    padding: 12,
-    alignItems: "center",
-    gap: 4,
-  },
-  iconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 4,
-  },
-  value: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-    letterSpacing: -0.5,
-  },
-  label: {
-    fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
-    letterSpacing: 0.5,
-    textAlign: "center",
-  },
-  sub: {
-    fontSize: 10,
-    fontFamily: "Inter_400Regular",
-    textAlign: "center",
-  },
+const strip = StyleSheet.create({
+  row: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  chip: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 9, paddingVertical: 6, borderRadius: 20, borderWidth: 1 },
+  val: { fontSize: 12, fontFamily: "Inter_600SemiBold" },
+  dot: { width: 5, height: 5, borderRadius: 2.5 },
 });
 
-const card = StyleSheet.create({
-  wrap: {
-    borderRadius: 14,
-    borderWidth: 1.5,
-    padding: 14,
-    marginBottom: 10,
-  },
-  topRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: 12,
-  },
-  titleGroup: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-  },
-  iconWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 9,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  title: {
-    fontSize: 13,
-    fontFamily: "Inter_600SemiBold",
-    marginBottom: 4,
-  },
-  badge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 6,
-    alignSelf: "flex-start",
-  },
-  dot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-  },
-  badgeText: {
-    fontSize: 9,
-    fontFamily: "Inter_700Bold",
-    letterSpacing: 0.6,
-  },
-  rightGroup: {
-    alignItems: "flex-end",
-    gap: 6,
-  },
-  currentVal: {
-    fontSize: 18,
-    fontFamily: "Inter_700Bold",
-    letterSpacing: -0.5,
-  },
-  statsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
-  statItem: {
-    alignItems: "center",
-    gap: 2,
-  },
-  statLabel: {
-    fontSize: 9,
-    fontFamily: "Inter_600SemiBold",
-    letterSpacing: 0.8,
-  },
-  statValue: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-  },
-  statusBar: {
-    height: 5,
-    borderRadius: 3,
-    overflow: "hidden",
-    flexDirection: "row",
-    marginBottom: 6,
-  },
-  statusSegment: {
-    height: "100%",
-  },
-  statusLegend: {
-    flexDirection: "row",
-    gap: 12,
-    flexWrap: "wrap",
-  },
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  legendDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  legendText: {
-    fontSize: 10,
-    fontFamily: "Inter_400Regular",
-  },
+const rc = StyleSheet.create({
+  wrap: { borderRadius: 14, borderWidth: 1.5, padding: 14, marginBottom: 10 },
+  topRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 },
+  left: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1 },
+  iconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  name: { fontSize: 14, fontFamily: "Inter_600SemiBold" },
+  trend: { fontSize: 11, fontFamily: "Inter_400Regular", marginTop: 2 },
+  levelBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1 },
+  levelText: { fontSize: 10, fontFamily: "Inter_700Bold", letterSpacing: 0.8 },
+  metricsRow: { flexDirection: "row", justifyContent: "space-between", marginBottom: 10 },
+  metric: { alignItems: "center", gap: 3 },
+  metricLabel: { fontSize: 9, fontFamily: "Inter_600SemiBold", letterSpacing: 0.8 },
+  metricValue: { fontSize: 13, fontFamily: "Inter_700Bold" },
+  secondaryRow: { flexDirection: "row", alignItems: "center", gap: 6, paddingTop: 8, marginBottom: 8, borderTopWidth: 1 },
+  secondaryText: { fontSize: 11, fontFamily: "Inter_400Regular", flex: 1 },
+  desc: { fontSize: 11, fontFamily: "Inter_400Regular", lineHeight: 16 },
 });
 
-const devCard = StyleSheet.create({
-  wrap: {
-    width: "47%",
-    borderRadius: 12,
-    borderWidth: 1.5,
-    padding: 12,
-    gap: 6,
-  },
-  iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 2,
-  },
-  name: {
-    fontSize: 12,
-    fontFamily: "Inter_600SemiBold",
-  },
-  statusRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  statusText: {
-    fontSize: 11,
-    fontFamily: "Inter_500Medium",
-  },
-  modeBadge: {
-    alignSelf: "flex-start",
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
-    marginTop: 2,
-  },
-  modeText: {
-    fontSize: 10,
-    fontFamily: "Inter_600SemiBold",
-    letterSpacing: 0.4,
-  },
+const gs = StyleSheet.create({
+  card: { borderRadius: 14, borderWidth: 1.5, padding: 16 },
+  header: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 12 },
+  iconWrap: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  title: { fontSize: 16, fontFamily: "Inter_700Bold" },
+  subtitle: { fontSize: 12, fontFamily: "Inter_400Regular", marginTop: 2 },
+  body: { fontSize: 13, fontFamily: "Inter_400Regular", lineHeight: 20, marginBottom: 12 },
+  divider: { height: 1, marginBottom: 12 },
+  benefitsTitle: { fontSize: 10, fontFamily: "Inter_600SemiBold", letterSpacing: 1, marginBottom: 8 },
+  benefitRow: { flexDirection: "row", alignItems: "flex-start", gap: 8, marginBottom: 8 },
+  benefitText: { fontSize: 12, fontFamily: "Inter_400Regular", flex: 1, lineHeight: 17 },
+  footer: { borderTopWidth: 1, paddingTop: 12, marginTop: 4 },
+  footerText: { fontSize: 10, fontFamily: "Inter_400Regular", textAlign: "center" },
 });
