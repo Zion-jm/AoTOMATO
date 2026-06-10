@@ -1,6 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import {
   Platform,
   ScrollView,
@@ -78,9 +78,8 @@ function KpiCard({ label, value, sub, icon, iconColor }: {
   );
 }
 
-function SensorCard({ sensorId, history }: { sensorId: string; history: number[] }) {
+function SensorCard({ sensorId, history, onPress }: { sensorId: string; history: number[]; onPress: () => void }) {
   const colors = useColors();
-  const router = useRouter();
   const { sensors } = useGreenhouse();
   const sensor = sensors.find((s) => s.id === sensorId);
   const meta = SENSOR_META[sensorId];
@@ -115,7 +114,7 @@ function SensorCard({ sensorId, history }: { sensorId: string; history: number[]
 
   return (
     <TouchableOpacity
-      onPress={() => router.push(`/sensor/${sensorId}` as any)}
+      onPress={onPress}
       activeOpacity={0.75}
     >
     <View style={[sc.wrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -207,8 +206,14 @@ function DeviceCard({ device }: { device: ReturnType<typeof useGreenhouse>["devi
 
 export default function DashboardScreen() {
   const colors = useColors();
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { sensors, sensorHistory, devices, alerts, isOnline, isUsingCached } = useGreenhouse();
+
+  const handleSensorPress = useCallback(
+    (id: string) => router.push(`/sensor/${id}` as any),
+    [router]
+  );
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
@@ -282,7 +287,7 @@ export default function DashboardScreen() {
           Last {sensorHistory.temperature?.length ?? 0} readings · updates every 2s
         </Text>
         {Object.keys(SENSOR_META).map((id) => (
-          <SensorCard key={id} sensorId={id} history={sensorHistory[id] ?? []} />
+          <SensorCard key={id} sensorId={id} history={sensorHistory[id] ?? []} onPress={() => handleSensorPress(id)} />
         ))}
 
         <Text style={[s.sectionLabel, { color: colors.mutedForeground }]}>DEVICE STATUS</Text>
