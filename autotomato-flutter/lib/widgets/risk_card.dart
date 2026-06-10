@@ -38,51 +38,51 @@ class RiskDomain {
 const List<RiskDomain> riskDomains = [
   RiskDomain(
     id: 'thermal',
-    name: 'Thermal Runaway',
+    name: 'Overheating',
     icon: Icons.thermostat,
     color: Color(0xFFFB923C),
     sensorId: 'temperature',
     thresholdHigh: 28,
     horizon: 30,
     description:
-        'Cherry tomato pollen viability drops above 29.4°C. Brief heat spikes during flowering can destroy yields.',
+        'If temperature goes above 28°C, tomato flowers may not produce fruit. High heat during flowering can destroy your harvest.',
   ),
   RiskDomain(
     id: 'humidity',
-    name: 'Humidity Trap',
+    name: 'Too Much Moisture',
     icon: Icons.water_drop,
     color: Color(0xFF60A5FA),
     sensorId: 'humidity',
     thresholdHigh: 75,
     horizon: 30,
     description:
-        'Sustained humidity above 75% creates conditions favorable for leaf mold and gray mold development.',
+        'If air moisture stays above 75%, mold and plant disease can quickly spread across your greenhouse.',
   ),
   RiskDomain(
     id: 'dryout',
-    name: 'Dry-Out',
+    name: 'Soil Drying Out',
     icon: Icons.grass,
     color: Color(0xFF34D399),
     sensorId: 'soilMoisture',
     thresholdLow: 60,
     horizon: 60,
     description:
-        'Root zone stress below 60% moisture risks blossom end rot and reduced nutrient uptake.',
+        'If soil moisture drops below 60%, plant roots get stressed and fruit quality suffers. Water the plants soon.',
   ),
   RiskDomain(
     id: 'lightcrash',
-    name: 'Light Crash',
+    name: 'Not Enough Light',
     icon: Icons.wb_sunny,
     color: Color(0xFFFACC15),
     sensorId: 'light',
     thresholdLow: 3000,
     horizon: 30,
     description:
-        'Photosynthesis rate drops sharply below 3,000 lux, reducing daily carbohydrate production.',
+        'Plants need at least 3,000 lux of light to grow properly. Low light slows growth and reduces fruit production.',
   ),
   RiskDomain(
     id: 'nutrient',
-    name: 'Nutrient Drift',
+    name: 'Nutrient Problem',
     icon: Icons.science,
     color: Color(0xFFA78BFA),
     sensorId: 'ph',
@@ -93,17 +93,17 @@ const List<RiskDomain> riskDomains = [
     thresholdHigh2: 4.0,
     horizon: 120,
     description:
-        'pH or EC outside optimal bands locks out nutrients causing deficiency symptoms within 1–2 days.',
+        'When pH or nutrient levels go out of range, plants cannot absorb the food they need. Yellowing leaves may appear within 1–2 days.',
   ),
   RiskDomain(
     id: 'stall',
-    name: 'System Stall',
+    name: 'System Connection',
     icon: Icons.wifi_tethering,
     color: Color(0xFF94A3B8),
     sensorId: 'temperature',
     horizon: 15,
     description:
-        'Connectivity degradation can create automation blackouts leaving the greenhouse uncontrolled.',
+        'If the internet connection is lost, the app cannot send automatic commands to your greenhouse devices.',
   ),
 ];
 
@@ -157,7 +157,7 @@ RiskResult evaluateRisk(RiskDomain domain, Map<String, List<double>> history) {
       slope: slope,
       confidence: 88,
       level: 'safe',
-      trendLabel: 'Heartbeat normal',
+      trendLabel: 'Connection normal',
     );
   }
 
@@ -237,32 +237,31 @@ class RiskCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final result = evaluateRisk(domain, history);
-
     final levelConfig = _levelConfig(result.level);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: AppColors.card,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: levelConfig.border),
       ),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Container(
-                width: 36,
-                height: 36,
+                width: 44,
+                height: 44,
                 decoration: BoxDecoration(
                   color: domain.color.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(domain.icon, size: 18, color: domain.color),
+                child: Icon(domain.icon, size: 22, color: domain.color),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -270,15 +269,15 @@ class RiskCard extends StatelessWidget {
                     Text(
                       domain.name,
                       style: GoogleFonts.inter(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
                         color: AppColors.foreground,
                       ),
                     ),
                     Text(
                       result.trendLabel,
                       style: GoogleFonts.inter(
-                        fontSize: 11,
+                        fontSize: 12,
                         color: AppColors.mutedForeground,
                       ),
                     ),
@@ -286,7 +285,7 @@ class RiskCard extends StatelessWidget {
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: levelConfig.bg,
                   borderRadius: BorderRadius.circular(8),
@@ -295,7 +294,7 @@ class RiskCard extends StatelessWidget {
                 child: Text(
                   levelConfig.label,
                   style: GoogleFonts.inter(
-                    fontSize: 10,
+                    fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: levelConfig.text,
                     letterSpacing: 0.8,
@@ -304,12 +303,75 @@ class RiskCard extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 14),
+          _riskGaugeBar(result.level),
+          const SizedBox(height: 14),
+          if (result.minsToBreach != null && domain.id != 'stall')
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: levelConfig.bg,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: levelConfig.border),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.timer_outlined, size: 18, color: levelConfig.text),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Problem in about ',
+                    style: GoogleFonts.inter(fontSize: 14, color: levelConfig.text),
+                  ),
+                  Text(
+                    '~${result.minsToBreach!.round()} min',
+                    style: GoogleFonts.inter(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: levelConfig.text,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    'if no action taken',
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: levelConfig.text.withOpacity(0.7),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (result.level == 'safe')
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.optimal.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.optimal.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_outline, size: 18, color: AppColors.optimal),
+                  const SizedBox(width: 8),
+                  Text(
+                    domain.id == 'stall' ? 'Connection is normal' : 'No problem expected soon',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: AppColors.optimal,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _metric(
-                'NOW',
+                'RIGHT NOW',
                 domain.id == 'stall'
                     ? 'Online'
                     : formatSensorValue(domain.sensorId, result.current),
@@ -323,44 +385,17 @@ class RiskCard extends StatelessWidget {
                 result.level == 'safe' ? AppColors.foreground : levelConfig.text,
               ),
               _metric(
-                'BREACH IN',
-                result.minsToBreach != null
-                    ? '~${result.minsToBreach!.round()}m'
-                    : domain.id == 'stall'
-                        ? 'N/A'
-                        : '—',
-                result.minsToBreach != null ? levelConfig.text : AppColors.optimal,
-              ),
-              _metric(
                 'CONFIDENCE',
                 '${result.confidence.round()}%',
                 AppColors.secondaryForeground,
               ),
             ],
           ),
-          if (domain.sensorId2 != null && result.current2 != null) ...[
-            const SizedBox(height: 8),
-            Divider(color: AppColors.border, height: 1),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.bolt, size: 12, color: Color(0xFFF472B6)),
-                const SizedBox(width: 6),
-                Text(
-                  '${domain.sensorId2!.toUpperCase()}: '
-                  '${formatSensorValue(domain.sensorId2!, result.current2!)} → '
-                  '${result.predicted2 != null ? formatSensorValue(domain.sensorId2!, result.predicted2!) : "—"}'
-                  ' in ${domain.horizon}m',
-                  style: GoogleFonts.inter(fontSize: 11, color: AppColors.mutedForeground),
-                ),
-              ],
-            ),
-          ],
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
           Text(
             domain.description,
             style: GoogleFonts.inter(
-              fontSize: 11,
+              fontSize: 13,
               color: AppColors.mutedForeground,
               height: 1.5,
             ),
@@ -370,13 +405,61 @@ class RiskCard extends StatelessWidget {
     );
   }
 
+  Widget _riskGaugeBar(String level) {
+    final levels = ['safe', 'watch', 'alert', 'critical'];
+    final activeIndex = levels.indexOf(level);
+
+    final colors = [AppColors.optimal, const Color(0xFFFACC15), AppColors.warning, AppColors.critical];
+    final labels = ['Safe', 'Watch', 'Alert', 'Critical'];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: List.generate(4, (i) {
+            final isActive = i <= activeIndex;
+            final isCurrentLevel = i == activeIndex;
+            return Expanded(
+              child: Container(
+                margin: EdgeInsets.only(right: i < 3 ? 3 : 0),
+                height: 8,
+                decoration: BoxDecoration(
+                  color: isActive ? colors[i] : colors[i].withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            );
+          }),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: List.generate(4, (i) {
+            final isCurrentLevel = i == activeIndex;
+            return Expanded(
+              child: Text(
+                labels[i],
+                textAlign: TextAlign.center,
+                style: GoogleFonts.inter(
+                  fontSize: 10,
+                  fontWeight: isCurrentLevel ? FontWeight.w700 : FontWeight.w400,
+                  color: isCurrentLevel ? colors[i] : AppColors.mutedForeground,
+                ),
+              ),
+            );
+          }),
+        ),
+      ],
+    );
+  }
+
   Widget _metric(String label, String value, Color valueColor) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Text(
           label,
           style: GoogleFonts.inter(
-            fontSize: 9,
+            fontSize: 10,
             fontWeight: FontWeight.w600,
             color: AppColors.mutedForeground,
             letterSpacing: 0.8,
@@ -386,7 +469,7 @@ class RiskCard extends StatelessWidget {
         Text(
           value,
           style: GoogleFonts.inter(
-            fontSize: 13,
+            fontSize: 14,
             fontWeight: FontWeight.w700,
             color: valueColor,
           ),

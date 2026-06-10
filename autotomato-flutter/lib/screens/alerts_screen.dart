@@ -1,10 +1,62 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 
+import '../models/models.dart';
 import '../providers/greenhouse_provider.dart';
 import '../theme/app_colors.dart';
+
+String _relativeTime(DateTime dt) {
+  final diff = DateTime.now().difference(dt);
+  if (diff.inSeconds < 60) return 'Just now';
+  if (diff.inMinutes == 1) return '1 minute ago';
+  if (diff.inMinutes < 60) return '${diff.inMinutes} minutes ago';
+  if (diff.inHours == 1) return '1 hour ago';
+  if (diff.inHours < 24) return '${diff.inHours} hours ago';
+  return DateFormat('MMM d, h:mm a').format(dt);
+}
+
+String _adviceForAlert(Alert alert) {
+  switch (alert.sensor) {
+    case 'temperature':
+      return '1. Check if the exhaust fan is turned on.\n'
+          '2. Open the greenhouse vents if you can.\n'
+          '3. Water the plants to help cool them down.\n'
+          '4. Add shade cloth if it stays hot after 10 minutes.';
+    case 'humidity':
+      return '1. Turn off the mist fogger.\n'
+          '2. Turn on the exhaust fan to push humid air out.\n'
+          '3. Open vents to let fresh air in.\n'
+          '4. Check for standing water on the floor.';
+    case 'soilMoisture':
+      return '1. Turn on the water pump.\n'
+          '2. Check if the irrigation pipes are blocked.\n'
+          '3. Water the plants manually if the pump is off.\n'
+          '4. Make sure the soil moisture sensor is not buried too deep.';
+    case 'light':
+      return '1. Turn on the grow lights.\n'
+          '2. Check if the greenhouse cover is blocking sunlight.\n'
+          '3. Clean dusty or foggy greenhouse panels.\n'
+          '4. Move shade cloth away if it was left on.';
+    case 'ph':
+      return '1. Check your nutrient solution.\n'
+          '2. If pH is too high (above 7.0), add a small amount of pH Down solution.\n'
+          '3. If pH is too low (below 6.0), add a small amount of pH Up solution.\n'
+          '4. Retest after 30 minutes.';
+    case 'ec':
+      return '1. Check the nutrient solution concentration.\n'
+          '2. If EC is too high, dilute the solution with clean water.\n'
+          '3. If EC is too low, add more nutrient solution.\n'
+          '4. Flush the system if EC has been off for more than a day.';
+    default:
+      return '1. Check the Controls screen and make sure key devices are running.\n'
+          '2. Inspect the greenhouse for anything unusual.\n'
+          '3. If the problem continues, check the sensor connections.\n'
+          '4. Contact your system administrator if you are unsure.';
+  }
+}
 
 class AlertsScreen extends StatelessWidget {
   const AlertsScreen({super.key});
@@ -46,7 +98,7 @@ class AlertsScreen extends StatelessWidget {
                                 Text(
                                   '${gh.alerts.length} total · $criticalCount critical · $warningCount warnings',
                                   style: GoogleFonts.inter(
-                                      fontSize: 12, color: AppColors.mutedForeground),
+                                      fontSize: 13, color: AppColors.mutedForeground),
                                 ),
                               ],
                             ),
@@ -54,42 +106,63 @@ class AlertsScreen extends StatelessWidget {
                           if (gh.alerts.isNotEmpty)
                             TextButton.icon(
                               onPressed: () {
+                                HapticFeedback.lightImpact();
                                 for (final a in List.from(gh.alerts)) {
                                   gh.dismissAlert(a.id);
                                 }
                               },
-                              icon: const Icon(Icons.clear_all, size: 16, color: AppColors.mutedForeground),
+                              icon: const Icon(Icons.clear_all,
+                                  size: 16, color: AppColors.mutedForeground),
                               label: Text(
                                 'Clear all',
                                 style: GoogleFonts.inter(
-                                    fontSize: 12, color: AppColors.mutedForeground),
+                                    fontSize: 13, color: AppColors.mutedForeground),
                               ),
                             ),
                         ],
                       ),
                       if (criticalCount > 0) ...[
-                        const SizedBox(height: 10),
+                        const SizedBox(height: 12),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                           decoration: BoxDecoration(
                             color: AppColors.critical.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(10),
+                            borderRadius: BorderRadius.circular(12),
                             border: Border.all(color: AppColors.critical.withOpacity(0.4)),
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.error_outline, size: 16, color: AppColors.critical),
-                              const SizedBox(width: 8),
-                              Text(
-                                '$criticalCount critical alert${criticalCount > 1 ? "s" : ""} require immediate attention',
-                                style: GoogleFonts.inter(
-                                    fontSize: 12, color: AppColors.critical),
+                              const Icon(Icons.warning_rounded,
+                                  size: 22, color: AppColors.critical),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  '$criticalCount critical alert${criticalCount > 1 ? "s" : ""} — your plants need attention now',
+                                  style: GoogleFonts.inter(
+                                      fontSize: 13,
+                                      color: AppColors.critical,
+                                      fontWeight: FontWeight.w600),
+                                ),
                               ),
                             ],
                           ),
                         ),
                       ],
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
+                      if (gh.alerts.isNotEmpty)
+                        Row(
+                          children: [
+                            Icon(Icons.swipe_left_outlined,
+                                size: 15, color: AppColors.mutedForeground),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Swipe left on an alert to dismiss it',
+                              style: GoogleFonts.inter(
+                                  fontSize: 12, color: AppColors.mutedForeground),
+                            ),
+                          ],
+                        ),
+                      const SizedBox(height: 6),
                     ],
                   ),
                 ),
@@ -100,28 +173,28 @@ class AlertsScreen extends StatelessWidget {
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Container(
-                                width: 56,
-                                height: 56,
+                                width: 68,
+                                height: 68,
                                 decoration: BoxDecoration(
                                   color: AppColors.optimal.withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(16),
+                                  borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: const Icon(Icons.check_circle_outline,
-                                    size: 28, color: AppColors.optimal),
+                                    size: 34, color: AppColors.optimal),
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 14),
                               Text(
-                                'All clear',
+                                'All clear!',
                                 style: GoogleFonts.inter(
-                                  fontSize: 18,
+                                  fontSize: 20,
                                   fontWeight: FontWeight.w700,
                                   color: AppColors.foreground,
                                 ),
                               ),
                               Text(
-                                'No active alerts',
+                                'No active alerts right now',
                                 style: GoogleFonts.inter(
-                                    fontSize: 13, color: AppColors.mutedForeground),
+                                    fontSize: 14, color: AppColors.mutedForeground),
                               ),
                             ],
                           ),
@@ -133,7 +206,10 @@ class AlertsScreen extends StatelessWidget {
                             final alert = gh.alerts[i];
                             return _AlertCard(
                               alert: alert,
-                              onDismiss: () => gh.dismissAlert(alert.id),
+                              onDismiss: () {
+                                HapticFeedback.lightImpact();
+                                gh.dismissAlert(alert.id);
+                              },
                             );
                           },
                         ),
@@ -148,14 +224,14 @@ class AlertsScreen extends StatelessWidget {
 }
 
 class _AlertCard extends StatelessWidget {
-  final dynamic alert;
+  final Alert alert;
   final VoidCallback onDismiss;
 
   const _AlertCard({required this.alert, required this.onDismiss});
 
   @override
   Widget build(BuildContext context) {
-    final severity = alert.severity as String;
+    final severity = alert.severity;
     final color = severity == 'critical'
         ? AppColors.critical
         : severity == 'warning'
@@ -163,87 +239,230 @@ class _AlertCard extends StatelessWidget {
             : AppColors.primary;
 
     final icon = severity == 'critical'
-        ? Icons.error_outline
+        ? Icons.error_rounded
         : severity == 'warning'
-            ? Icons.warning_amber
-            : Icons.info_outline;
-
-    final timeStr = DateFormat('h:mm a').format(alert.timestamp as DateTime);
+            ? Icons.warning_rounded
+            : Icons.info_rounded;
 
     return Dismissible(
-      key: Key(alert.id as String),
+      key: Key(alert.id),
       direction: DismissDirection.endToStart,
       onDismissed: (_) => onDismiss(),
       background: Container(
+        margin: const EdgeInsets.only(bottom: 10),
         alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        color: AppColors.critical.withOpacity(0.2),
-        child: const Icon(Icons.delete_outline, color: AppColors.critical),
+        padding: const EdgeInsets.only(right: 24),
+        decoration: BoxDecoration(
+          color: AppColors.critical.withOpacity(0.2),
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.delete_outline, color: AppColors.critical, size: 22),
+            const SizedBox(height: 4),
+            Text(
+              'Dismiss',
+              style: GoogleFonts.inter(
+                  fontSize: 11, color: AppColors.critical, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
       ),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(14),
+        margin: const EdgeInsets.only(bottom: 10),
         decoration: BoxDecoration(
           color: AppColors.card,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.3)),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withOpacity(0.35)),
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, size: 16, color: color),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    alert.message as String,
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      color: AppColors.foreground,
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
                     ),
+                    child: Icon(icon, size: 24, color: color),
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: color.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(5),
-                        ),
-                        child: Text(
-                          severity.toUpperCase(),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          alert.message,
                           style: GoogleFonts.inter(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            color: color,
-                            letterSpacing: 0.5,
+                            fontSize: 14,
+                            color: AppColors.foreground,
+                            height: 1.4,
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        timeStr,
-                        style: GoogleFonts.inter(fontSize: 11, color: AppColors.mutedForeground),
-                      ),
-                    ],
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: color.withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                severity.toUpperCase(),
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: color,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              _relativeTime(alert.timestamp),
+                              style: GoogleFonts.inter(
+                                  fontSize: 12, color: AppColors.mutedForeground),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: onDismiss,
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(Icons.close,
+                          size: 18, color: AppColors.mutedForeground),
+                    ),
                   ),
                 ],
               ),
+              if (severity == 'critical' || severity == 'warning') ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showAdvice(context, alert, color),
+                    icon: Icon(Icons.help_outline_rounded, size: 16, color: color),
+                    label: Text(
+                      'What should I do?',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: color,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: color.withOpacity(0.5)),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showAdvice(BuildContext context, Alert alert, Color color) {
+    final advice = _adviceForAlert(alert);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      isScrollControlled: true,
+      builder: (_) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
             ),
-            GestureDetector(
-              onTap: onDismiss,
-              child: const Icon(Icons.close, size: 16, color: AppColors.mutedForeground),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(Icons.tips_and_updates_outlined, size: 22, color: color),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'What to do now',
+                    style: GoogleFonts.inter(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.foreground,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              alert.message,
+              style: GoogleFonts.inter(
+                  fontSize: 13, color: AppColors.mutedForeground),
+            ),
+            const SizedBox(height: 18),
+            Divider(color: AppColors.border),
+            const SizedBox(height: 14),
+            Text(
+              advice,
+              style: GoogleFonts.inter(
+                fontSize: 15,
+                color: AppColors.secondaryForeground,
+                height: 1.8,
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                child: Text(
+                  'Got it',
+                  style: GoogleFonts.inter(
+                      fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+              ),
             ),
           ],
         ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'providers/greenhouse_provider.dart';
 import 'screens/dashboard_screen.dart';
@@ -10,6 +11,7 @@ import 'screens/camera_screen.dart';
 import 'screens/alerts_screen.dart';
 import 'screens/analytics_screen.dart';
 import 'theme/app_colors.dart';
+import 'widgets/onboarding_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -53,7 +55,7 @@ class AutomataApp extends StatelessWidget {
           backgroundColor: AppColors.card,
           indicatorColor: AppColors.primary.withOpacity(0.2),
           labelTextStyle: MaterialStateProperty.all(
-            GoogleFonts.inter(fontSize: 11, color: AppColors.mutedForeground),
+            GoogleFonts.inter(fontSize: 12, color: AppColors.mutedForeground),
           ),
           iconTheme: MaterialStateProperty.resolveWith((states) {
             if (states.contains(MaterialState.selected)) {
@@ -65,8 +67,49 @@ class AutomataApp extends StatelessWidget {
         dividerColor: AppColors.border,
         cardColor: AppColors.card,
       ),
-      home: const MainScaffold(),
+      home: const StartupGate(),
     );
+  }
+}
+
+class StartupGate extends StatefulWidget {
+  const StartupGate({super.key});
+
+  @override
+  State<StartupGate> createState() => _StartupGateState();
+}
+
+class _StartupGateState extends State<StartupGate> {
+  bool? _showOnboarding;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+  }
+
+  Future<void> _check() async {
+    final prefs = await SharedPreferences.getInstance();
+    final done = prefs.getBool('onboarding_done') ?? false;
+    if (mounted) setState(() => _showOnboarding = !done);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_showOnboarding == null) {
+      return const Scaffold(
+        backgroundColor: AppColors.background,
+        body: Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
+      );
+    }
+    if (_showOnboarding!) {
+      return OnboardingScreen(
+        onDone: () => setState(() => _showOnboarding = false),
+      );
+    }
+    return const MainScaffold();
   }
 }
 
@@ -123,7 +166,7 @@ class _MainScaffoldState extends State<MainScaffold> {
           NavigationDestination(
             icon: Icon(Icons.analytics_outlined),
             selectedIcon: Icon(Icons.analytics),
-            label: 'Analytics',
+            label: 'Risk',
           ),
         ],
       ),

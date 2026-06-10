@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -47,7 +48,7 @@ class DashboardScreen extends StatelessWidget {
                                   Text(
                                     'Greenhouse Monitor',
                                     style: GoogleFonts.inter(
-                                      fontSize: 13,
+                                      fontSize: 14,
                                       color: AppColors.mutedForeground,
                                     ),
                                   ),
@@ -86,18 +87,14 @@ class DashboardScreen extends StatelessWidget {
                             ),
                           ],
                         ),
+                        const SizedBox(height: 16),
+                        _StatusBanner(criticals: criticals, warnings: warnings),
                         const SizedBox(height: 20),
                         _sectionLabel('OVERVIEW'),
                         const SizedBox(height: 8),
                         Row(
                           children: [
-                            KpiCard(
-                              icon: Icons.eco,
-                              iconColor: AppColors.primary,
-                              value: '${gh.healthScore.round()}%',
-                              label: 'Health Score',
-                              sublabel: '${gh.optimalCount}/6 optimal',
-                            ),
+                            _HealthArcCard(score: gh.healthScore),
                             const SizedBox(width: 8),
                             KpiCard(
                               icon: Icons.notifications,
@@ -119,12 +116,12 @@ class DashboardScreen extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 20),
-                        _sectionLabel('SENSOR TRENDS'),
-                        const SizedBox(height: 2),
+                        _sectionLabel('SENSOR READINGS'),
+                        const SizedBox(height: 4),
                         Text(
-                          'Last ${gh.sensorHistory['temperature']?.length ?? 0} readings · updates every 6s',
+                          'Last ${gh.sensorHistory['temperature']?.length ?? 0} readings · updates every 6s · tap any card for details',
                           style: GoogleFonts.inter(
-                            fontSize: 11,
+                            fontSize: 12,
                             color: AppColors.mutedForeground,
                           ),
                         ),
@@ -177,13 +174,192 @@ class DashboardScreen extends StatelessWidget {
     return Text(
       text,
       style: GoogleFonts.inter(
-        fontSize: 11,
+        fontSize: 12,
         fontWeight: FontWeight.w600,
         color: AppColors.mutedForeground,
         letterSpacing: 1.2,
       ),
     );
   }
+}
+
+class _StatusBanner extends StatelessWidget {
+  final int criticals;
+  final int warnings;
+
+  const _StatusBanner({required this.criticals, required this.warnings});
+
+  @override
+  Widget build(BuildContext context) {
+    Color bg;
+    Color textColor;
+    IconData icon;
+    String title;
+    String subtitle;
+
+    if (criticals > 0) {
+      bg = AppColors.critical.withOpacity(0.13);
+      textColor = AppColors.critical;
+      icon = Icons.warning_rounded;
+      title = 'URGENT — Action needed now!';
+      subtitle = '$criticals critical alert${criticals > 1 ? "s" : ""} require${criticals == 1 ? "s" : ""} attention';
+    } else if (warnings > 0) {
+      bg = AppColors.warning.withOpacity(0.12);
+      textColor = AppColors.warning;
+      icon = Icons.info_rounded;
+      title = 'Check on your plants soon';
+      subtitle = '$warnings sensor${warnings > 1 ? "s are" : " is"} outside the normal range';
+    } else {
+      bg = AppColors.optimal.withOpacity(0.12);
+      textColor = AppColors.optimal;
+      icon = Icons.check_circle_rounded;
+      title = 'Your greenhouse is HEALTHY';
+      subtitle = 'All sensors are reading normally';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: textColor.withOpacity(0.4)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 32, color: textColor),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.inter(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: textColor,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: textColor.withOpacity(0.8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HealthArcCard extends StatelessWidget {
+  final double score;
+
+  const _HealthArcCard({required this.score});
+
+  Color get _color {
+    if (score >= 80) return AppColors.optimal;
+    if (score >= 50) return AppColors.warning;
+    return AppColors.critical;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.card,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: _color.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(Icons.eco, size: 20, color: _color),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 52,
+              child: CustomPaint(
+                painter: _ArcPainter(progress: score / 100, color: _color),
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 16),
+                    child: Text(
+                      '${score.round()}%',
+                      style: GoogleFonts.inter(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.foreground,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Health Score',
+              style: GoogleFonts.inter(fontSize: 13, color: AppColors.mutedForeground),
+            ),
+            Text(
+              score >= 80 ? 'Looking great!' : score >= 50 ? 'Needs attention' : 'Act now',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                color: _color,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ArcPainter extends CustomPainter {
+  final double progress;
+  final Color color;
+
+  _ArcPainter({required this.progress, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height * 0.88);
+    final radius = size.width * 0.42;
+    final rect = Rect.fromCircle(center: center, radius: radius);
+
+    final trackPaint = Paint()
+      ..color = AppColors.border
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 5
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(rect, pi, pi, false, trackPaint);
+
+    final progressPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 5
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(rect, pi, pi * progress.clamp(0.0, 1.0), false, progressPaint);
+  }
+
+  @override
+  bool shouldRepaint(_ArcPainter old) =>
+      old.progress != progress || old.color != color;
 }
 
 class _DeviceChip extends StatelessWidget {
@@ -198,7 +374,8 @@ class _DeviceChip extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.card,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: device.isOn ? AppColors.primary.withOpacity(0.4) : AppColors.border),
+        border: Border.all(
+            color: device.isOn ? AppColors.primary.withOpacity(0.4) : AppColors.border),
       ),
       child: Row(
         children: [
@@ -240,7 +417,7 @@ class _DeviceChip extends StatelessWidget {
                   device.isOn ? 'ON' : 'OFF',
                   style: GoogleFonts.inter(
                     fontSize: 10,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                     color: color,
                   ),
                 ),
@@ -280,14 +457,14 @@ class _AlertRow extends StatelessWidget {
                 : alert.severity == 'warning'
                     ? Icons.warning_amber
                     : Icons.check_circle_outline,
-            size: 16,
+            size: 18,
             color: color,
           ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               alert.message,
-              style: GoogleFonts.inter(fontSize: 12, color: AppColors.secondaryForeground),
+              style: GoogleFonts.inter(fontSize: 13, color: AppColors.secondaryForeground),
             ),
           ),
         ],

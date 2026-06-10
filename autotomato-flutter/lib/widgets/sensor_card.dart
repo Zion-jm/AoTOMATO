@@ -20,6 +20,19 @@ String formatSensorValue(String id, double value) {
   }
 }
 
+String sensorDisplayLabel(String id, String fallback) {
+  switch (id) {
+    case 'ec':
+      return 'Nutrient Level';
+    case 'light':
+      return 'Light Level';
+    case 'soilMoisture':
+      return 'Soil Water';
+    default:
+      return fallback;
+  }
+}
+
 IconData sensorIcon(String id) {
   switch (id) {
     case 'temperature':
@@ -53,6 +66,7 @@ class SensorCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = AppColors.sensorColor(sensor.id);
     final statusColor = AppColors.statusColor(sensor.statusLabel.toLowerCase());
+    final displayLabel = sensorDisplayLabel(sensor.id, sensor.label);
 
     final stats = history.isEmpty
         ? (min: sensor.value, max: sensor.value, avg: sensor.value)
@@ -64,7 +78,9 @@ class SensorCard extends StatelessWidget {
 
     final optimalPct = history.isEmpty
         ? 0
-        : (history.where((v) => v >= sensor.optimalMin && v <= sensor.optimalMax).length /
+        : (history
+                    .where((v) => v >= sensor.optimalMin && v <= sensor.optimalMax)
+                    .length /
                 history.length *
                 100)
             .round();
@@ -77,44 +93,48 @@ class SensorCard extends StatelessWidget {
         ),
       ),
       child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
+        margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
           color: AppColors.card,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: AppColors.border),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: statusColor == AppColors.optimal
+                ? AppColors.border
+                : statusColor.withOpacity(0.4),
+          ),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
                   Container(
-                    width: 38,
-                    height: 38,
+                    width: 44,
+                    height: 44,
                     decoration: BoxDecoration(
                       color: color.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    child: Icon(sensorIcon(sensor.id), size: 20, color: color),
+                    child: Icon(sensorIcon(sensor.id), size: 22, color: color),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          sensor.label,
+                          displayLabel,
                           style: GoogleFonts.inter(
-                            fontSize: 14,
+                            fontSize: 15,
                             fontWeight: FontWeight.w600,
                             color: AppColors.foreground,
                           ),
                         ),
-                        const SizedBox(height: 3),
+                        const SizedBox(height: 4),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                           decoration: BoxDecoration(
                             color: statusColor.withOpacity(0.15),
                             borderRadius: BorderRadius.circular(6),
@@ -122,8 +142,8 @@ class SensorCard extends StatelessWidget {
                           child: Text(
                             sensor.statusLabel,
                             style: GoogleFonts.inter(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
                               color: statusColor,
                               letterSpacing: 0.5,
                             ),
@@ -138,7 +158,7 @@ class SensorCard extends StatelessWidget {
                       Text(
                         formatSensorValue(sensor.id, sensor.value),
                         style: GoogleFonts.inter(
-                          fontSize: 20,
+                          fontSize: 22,
                           fontWeight: FontWeight.w700,
                           color: AppColors.foreground,
                         ),
@@ -146,13 +166,13 @@ class SensorCard extends StatelessWidget {
                       SparklineChart(
                         data: history.isEmpty ? [sensor.value] : history,
                         color: color,
-                        height: 32,
+                        height: 34,
                       ),
                     ],
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -166,7 +186,7 @@ class SensorCard extends StatelessWidget {
               Stack(
                 children: [
                   Container(
-                    height: 3,
+                    height: 4,
                     decoration: BoxDecoration(
                       color: AppColors.border,
                       borderRadius: BorderRadius.circular(2),
@@ -175,7 +195,7 @@ class SensorCard extends StatelessWidget {
                   FractionallySizedBox(
                     widthFactor: (optimalPct / 100).clamp(0.0, 1.0),
                     child: Container(
-                      height: 3,
+                      height: 4,
                       decoration: BoxDecoration(
                         color: statusColor,
                         borderRadius: BorderRadius.circular(2),
@@ -184,30 +204,30 @@ class SensorCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  _dotLegend(AppColors.optimal, 'Optimal $optimalPct%'),
-                  const SizedBox(width: 12),
-                  _dotLegend(
-                    AppColors.warning,
-                    'Warning ${(history.where((v) => v < sensor.optimalMin * 0.9 || v > sensor.optimalMax * 1.05).length / (history.isEmpty ? 1 : history.length) * 100).round()}%',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Text(
-                    'Tap for details',
-                    style: GoogleFonts.inter(
-                      fontSize: 10,
-                      color: AppColors.mutedForeground,
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: color.withOpacity(0.2)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.touch_app_outlined, size: 14, color: color),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Tap to see full history & details',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: color,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                  const Spacer(),
-                  Icon(Icons.chevron_right, size: 14, color: AppColors.mutedForeground),
-                ],
+                    const Spacer(),
+                    Icon(Icons.chevron_right, size: 16, color: color),
+                  ],
+                ),
               ),
             ],
           ),
@@ -222,7 +242,7 @@ class SensorCard extends StatelessWidget {
         Text(
           label,
           style: GoogleFonts.inter(
-            fontSize: 9,
+            fontSize: 10,
             fontWeight: FontWeight.w600,
             color: AppColors.mutedForeground,
             letterSpacing: 0.8,
@@ -232,27 +252,10 @@ class SensorCard extends StatelessWidget {
         Text(
           value,
           style: GoogleFonts.inter(
-            fontSize: 12,
+            fontSize: 13,
             fontWeight: FontWeight.w700,
             color: color ?? AppColors.foreground,
           ),
-        ),
-      ],
-    );
-  }
-
-  Widget _dotLegend(Color color, String label) {
-    return Row(
-      children: [
-        Container(
-          width: 6,
-          height: 6,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-        ),
-        const SizedBox(width: 4),
-        Text(
-          label,
-          style: GoogleFonts.inter(fontSize: 10, color: AppColors.mutedForeground),
         ),
       ],
     );
