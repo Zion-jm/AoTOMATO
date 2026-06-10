@@ -1,10 +1,12 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React, { useMemo } from "react";
 import {
   Platform,
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { Svg, Polyline } from "react-native-svg";
@@ -78,6 +80,7 @@ function KpiCard({ label, value, sub, icon, iconColor }: {
 
 function SensorCard({ sensorId, history }: { sensorId: string; history: number[] }) {
   const colors = useColors();
+  const router = useRouter();
   const { sensors } = useGreenhouse();
   const sensor = sensors.find((s) => s.id === sensorId);
   const meta = SENSOR_META[sensorId];
@@ -111,6 +114,10 @@ function SensorCard({ sensorId, history }: { sensorId: string; history: number[]
   };
 
   return (
+    <TouchableOpacity
+      onPress={() => router.push(`/sensor/${sensorId}` as any)}
+      activeOpacity={0.75}
+    >
     <View style={[sc.wrap, { backgroundColor: colors.card, borderColor: colors.border }]}>
       <View style={sc.topRow}>
         <View style={sc.titleGroup}>
@@ -171,6 +178,7 @@ function SensorCard({ sensorId, history }: { sensorId: string; history: number[]
         ))}
       </View>
     </View>
+    </TouchableOpacity>
   );
 }
 
